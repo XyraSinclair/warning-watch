@@ -84,23 +84,25 @@ the public.
 
 | Layer | Today | Gap |
 |---|---|---|
-| Ambient gamma | BfS + EURDEP mirror, hourly, coherence-gated | **Europe only.** Nothing over North America, East or South Asia, the Middle East |
+| Ambient gamma | BfS + EURDEP mirror, hourly, coherence-gated; EPA RadNet from 19 Sept (140 US monitors, hourly, persistence-gated: CBRN-WATCH.md § 3) | Nothing over East or South Asia, the Middle East, Russia. Checked 19 Sept: Safecast's open API is sparse and mostly stale, Japan NRA has no data feed |
 | Detonation | Rule live 19 Sept: classification `nuclear explosion` → critical; M ≥ 3.5 in a test-site geofence → high when shallow or when the depth is undetermined at a seismically quiet site, elevated when undetermined at an active one; `explosion` M ≥ 4 anywhere → elevated (CBRN-WATCH.md § 6a) | Replayed on the catalogue since 2000: all six DPRK tests critical, one non-test high, eight elevated in 26.7 years. Not yet seen: a live first-solution's latency and typing |
 | Facility events | NRC event notifications + reactor status | United States only |
 | Official warning | NWS CAP nuclear / radiological / hazmat types, relayed verbatim at critical | United States only |
 | Agency reporting | IAEA news (operator surface) | Latency unmeasured |
 | Posture | special-mission aircraft presence (operator surface) | No baseline for strategic command-post or tanker activity |
 
-Candidate sources, **each to be verified by a live fetch before it is designed
-around** (none is asserted here as working): Safecast open API for gamma outside
-Europe; Japan NRA monitoring posts; EPA RadNet near-real-time gamma (the
-README and the section below say laboratory data only — re-check); national CAP feeds
-beyond NWS; USGS event-type and depth fields against a geofence of the known
-test sites. CTBTO IMS and IAEA USIE stay out: treaty- and member-restricted.
+Candidate sources, each verified by a live fetch before it was designed around.
+Fetched 19 Sept: EPA RadNet serves near-real-time hourly gamma (the earlier
+"laboratory data only" note was wrong) and is now ingested; Safecast's
+measurements API returns 2018 as its newest rows and its realtime device list is
+a few dozen volunteer sensors, most silent for weeks; Japan NRA's monitoring
+site is a browser app with no data endpoint. Still to try: national CAP feeds
+beyond NWS. CTBTO IMS and IAEA USIE stay out: treaty- and member-restricted.
 
 Order within rung 4: detonation rule first (done 19 Sept: one feed already
 ingested, highest consequence, lowest false-alarm surface), then gamma coverage
-outside Europe, then non-US official warnings.
+outside Europe (RadNet done 19 Sept; nothing further is openly available), then
+non-US official warnings.
 
 ## CBRN alarm layer (implemented 10 September 2026)
 
@@ -132,9 +134,9 @@ or that a quiet instrument means safety. Its open work:
 - **Warm-up is the current state.** The radiological detector arms per station
   after 48 hourly samples (two days) and the aircraft detector after ten
   same-hour samples over 21 days. Until then both report `warming`.
-- **Radiation coverage is European** because no open global network exists.
-  EPA RadNet publishes laboratory data rather than near-real-time telemetry;
-  CTBTO's IMS network is treaty-restricted; ProMED moved behind a subscription.
+- **Radiation coverage is Europe and the United States** because no open
+  global network exists. CTBTO's IMS network is treaty-restricted; ProMED moved
+  behind a subscription.
 - **The BfS EURDEP mirror needs lag monitoring.** It is a national regulator's
   republication of a European feed whose authoritative JRC service was stale.
 - **Vocabulary coverage is one post stream and one news index**, and its

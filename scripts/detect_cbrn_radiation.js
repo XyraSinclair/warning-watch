@@ -12,6 +12,16 @@ const RANK = { watch: 1, elevated: 3, high: 4, critical: 5 };
 // is unavailable, never presumed normal. EURDEP normal status is 1.
 const EXCLUDED_STATUS = new Set([2, 3]);
 const EXCLUDED_TEXT = new Set(['defekt', 'Testbetrieb']);
+// EPA RadNet is one monitor per city, hundreds of kilometres apart: no monitor
+// has neighbours to agree with, so agreement is asked of time instead of space.
+// The record (19 Sept 2026; 131 monitors, 1.59 million hours since Jan 2025):
+// highest hour anywhere 0.316 uSv/h, highest ratio to a monitor's own median
+// 5.75x (radon washout in rain), station threshold met zero times. One
+// departing hour is therefore `elevated` (95% bound: about two a year across
+// the network), a second consecutive hour or a second monitor is `high`.
+// EPA publishes only hours it has approved, so a real spike may be held back
+// for review: silence from RadNet is not an all-clear.
+const SPARSE_NETWORKS = new Set(['radnet']);
 const EVENTS_SCHEMA = `CREATE TABLE IF NOT EXISTS alert_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, severity TEXT NOT NULL,
   cohort TEXT NOT NULL, event_key TEXT NOT NULL UNIQUE, occurred_at TEXT NOT NULL,
@@ -37,8 +47,20 @@ function options(argv) {
 function normal(row) {
   try {
     const quality = JSON.parse(row.quality);
+    if (row.source === 'radnet') return quality.status === 'APPROVED' && row.unit === 'µSv/h';
     return quality.site_status === 1 && !EXCLUDED_STATUS.has(quality.site_status) && !EXCLUDED_TEXT.has(quality.site_status_text) && ['µSv/h', 'μSv/h', 'uSv/h'].includes(row.unit);
   } catch { return false; }
+}
+
+function isDeparting(value, median) {
+  return (value >= 3 * median && value - median >= 0.5) || value >= 5;
+}
+
+// How long has this station been departing without a break? History ascends; the last row is the latest.
+function departingRun(history, median) {
+  let start = history.length - 1;
+  while (start > 0 && normal(history[start - 1]) && isDeparting(history[start - 1].value, median) && Date.parse(history[start].observed_at) - Date.parse(history[start - 1].observed_at) <= 90 * 60000) start -= 1;
+  return { hours: history.length - start, since: history[start].observed_at };
 }
 
 function clusters(stations) {
@@ -78,13 +100,13 @@ function detect(db, settings, now = Date.now()) {
     const z = robustZ(latest.value, stats, Math.max(0.02, 0.05 * stats.median));
     const rise = latest.value - stats.median;
     const ratio = stats.median > 0 ? latest.value / stats.median : null;
-    const departing = (latest.value >= 3 * stats.median && rise >= 0.5) || latest.value >= 5;
+    const departing = isDeparting(latest.value, stats.median);
     const series = `radiation:${station.source}:${station.station_id}`;
     const previous = readAlarmState(db, series, 'cusum');
     const adjacent = previous && Date.parse(latest.observed_at) - Date.parse(previous.observed_at) <= 90 * 60000;
     const s = previous?.observed_at === latest.observed_at ? previous.s : departing ? cusumStep(adjacent ? previous.s : 0, Math.max(0, z), 0.5) : 0;
     states.push({ series, method: 'cusum', state: { observed_at: latest.observed_at, s } });
-    if (departing) candidates.push({ ...station, ...latest, stats, z, rise, ratio, cusum: s });
+    if (departing) candidates.push({ ...station, ...latest, stats, z, rise, ratio, cusum: s, run: departingRun(history, stats.median) });
   }
   summary.departing_stations = candidates.length;
   candidates.sort((a, b) => b.value - a.value || a.station_id.localeCompare(b.station_id));
@@ -111,10 +133,17 @@ function detect(db, settings, now = Date.now()) {
     const ratios = group.map((row) => row.ratio);
     const ratioMedian = ratios.every(Number.isFinite) ? medianOf(ratios) : null;
     const riseMedian = medianOf(group.map((row) => row.rise));
-    const coherent = group.length >= 3 && new Set(group.map((row) => row.name).filter(Boolean)).size >= 2 && group.every((row) => row.z >= 5) && ratioMedian >= 3 && riseMedian >= 0.5;
-    let level = coherent ? (maxValue >= 10 || group.length >= 15 ? 5 : group.length >= 5 ? 4 : 3) : 1;
+    const strong = group.every((row) => row.z >= 5) && ratioMedian >= 3 && riseMedian >= 0.5;
+    const sparse = group.every((row) => SPARSE_NETWORKS.has(row.source));
+    const runHours = Math.max(...group.map((row) => row.run.hours));
+    const coherent = strong && (sparse ? runHours >= 2 || group.length >= 2 : group.length >= 3 && new Set(group.map((row) => row.name).filter(Boolean)).size >= 2);
+    let level = sparse
+      ? (strong ? (coherent ? (maxValue >= 10 ? 5 : 4) : 3) : 1)
+      : coherent ? (maxValue >= 10 || group.length >= 15 ? 5 : group.length >= 5 ? 4 : 3) : 1;
     const observedAt = group.map((row) => row.observed_at).sort().at(-1);
-    const keyParts = [`${lat.toFixed(2)},${lon.toFixed(2)}`, 'radiation', observedAt.slice(0, 13)];
+    // A sparse episode is keyed to its first hour, so the confirming hour raises the same event instead of opening a second one.
+    const keyHour = sparse ? group.map((row) => row.run.since).sort()[0] : observedAt;
+    const keyParts = [`${lat.toFixed(2)},${lon.toFixed(2)}`, 'radiation', keyHour.slice(0, 13)];
     const eventKey = [KIND.RADIATION_ANOMALY, ...keyParts].join(':');
     const existing = existingQuery?.get(eventKey);
     if (existing && RANK[existing.severity] >= 3) publicKeys.add(eventKey);
@@ -125,12 +154,13 @@ function detect(db, settings, now = Date.now()) {
     for (const a of group) for (const b of group) diameter = Math.max(diameter, haversineKm(a.lat, a.lon, b.lat, b.lon));
     const networks = [...new Set(group.map((row) => row.source))].sort();
     const countries = [...new Set(group.map((row) => row.country).filter(Boolean))].sort();
-    const message = `${group.length} gamma monitor${group.length === 1 ? '' : 's'} within ${Math.ceil(diameter)} km near ${nearest.name || nearest.station_id}${nearest.country ? `, ${nearest.country}` : ''} on ${networks.join(', ')} ${group.length === 1 ? 'rose' : 'rose together'}: median ${baselineMedian.toFixed(2)} -> ${valueMedian.toFixed(2)} uSv/h (${Number.isFinite(ratioMedian) ? ratioMedian.toFixed(1) : 'undefined'}x the 30-day median, +${riseMedian.toFixed(2)} uSv/h), observed within the last ${settings.minutes} minutes. Station threshold: (value >= 3x median and rise >= 0.5 uSv/h) or value >= 5 uSv/h.${suppression ? ` ${suppression}.` : ''}`;
-    const payload = { cluster_station_count: group.length, departing_station_count: candidates.length, centroid_lat: lat, centroid_lon: lon, max_value: maxValue, ratio_median: ratioMedian, absolute_rise: riseMedian, countries, station_names: group.slice(0, 5).map((row) => row.name), networks, source_family: 'radiation', window_minutes: settings.minutes, fusion_eligible: coherent, suppression };
+    const where = group.length === 1 ? `The gamma monitor at ${nearest.name || nearest.station_id}${nearest.country ? `, ${nearest.country}` : ''} (${networks.join(', ')}) rose` : `${group.length} gamma monitors within ${Math.ceil(diameter)} km near ${nearest.name || nearest.station_id}${nearest.country ? `, ${nearest.country}` : ''} on ${networks.join(', ')} rose together`;
+    const message = `${where}: median ${baselineMedian.toFixed(2)} -> ${valueMedian.toFixed(2)} uSv/h (${Number.isFinite(ratioMedian) ? ratioMedian.toFixed(1) : 'undefined'}x the 30-day median, +${riseMedian.toFixed(2)} uSv/h), observed within the last ${settings.minutes} minutes. Station threshold: (value >= 3x median and rise >= 0.5 uSv/h) or value >= 5 uSv/h.${sparse ? ` This network has one monitor per city, so no neighbour can confirm it: ${runHours >= 2 ? `the departure has now held for ${runHours} consecutive hourly readings` : 'a second consecutive hour is the confirmation, and it has not come yet'}. In 1.59 million monitor-hours since January 2025 no monitor on it met this threshold once; the highest hour recorded was 0.32 uSv/h.` : ''}${suppression ? ` ${suppression}.` : ''}`;
+    const payload = { cluster_station_count: group.length, departing_station_count: candidates.length, centroid_lat: lat, centroid_lon: lon, max_value: maxValue, ratio_median: ratioMedian, absolute_rise: riseMedian, countries, station_names: group.slice(0, 5).map((row) => row.name), networks, source_family: 'radiation', window_minutes: settings.minutes, fusion_eligible: coherent, sparse_network: sparse, consecutive_hours: runHours, suppression };
     if (level >= 3) payload.public_emitted_at = existing && RANK[existing.severity] >= 3 ? existing.public_at : new Date(now).toISOString();
     events.push(buildCbrnEvent({ kind: KIND.RADIATION_ANOMALY, level, occurredAt: observedAt, title: `Gamma dose-rate departure near ${nearest.name || nearest.station_id}`, message, source: networks.join(', '), keyParts, payload }));
   }
-  for (const run of db.prepare("SELECT * FROM cbrn_ingest_runs WHERE source IN ('de','eurdep') AND consecutive_failures >= 3").all()) {
+  for (const run of db.prepare("SELECT * FROM cbrn_ingest_runs WHERE source IN ('de','eurdep','radnet') AND consecutive_failures >= 3").all()) {
     let detail;
     try { detail = JSON.parse(run.detail_json || '{}'); } catch { detail = {}; }
     const series = `network:${run.source}`;

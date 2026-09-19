@@ -258,7 +258,10 @@ Coverage limits are operational facts, not caveats: gamma telemetry is the
 European reporting networks republished by the German BfS service (the JRC's own
 EURDEP value service was stale and partly unavailable when this was built — its
 station catalogue timestamps were sixteen months behind — so the BfS mirror is
-the live path and needs watching for lag drift); aircraft sampling is a fixed
+the live path and needs watching for lag drift) plus EPA RadNet's 140 US
+monitors (one CSV per monitor per month, polled at most hourly; a new deploy
+seeds the 48-reading baseline with `ingest_cbrn_radiation.js --networks radnet
+--months 2 --force`); aircraft sampling is a fixed
 roster of 16 public geographies, not a global picture; vocabulary counts come
 from one post stream and one news index. A normal reading asserts nothing
 outside the monitored area.

@@ -19,7 +19,7 @@ physical thing changed" to "a person knows, with the uncertainty stated."
 
 | Family | What is measured | Source | Cadence |
 |---|---|---|---|
-| **Radiological telemetry** | Gamma dose rate per station, µSv/h | German BfS/IMIS OGC service: the 1,676-probe German network (`opendata:odlinfo_odl_1h_latest`) and the live EURDEP mirror, 17,384 stations in 44 countries (`opendata:eurdep_latestValue`) | hourly |
+| **Radiological telemetry** | Gamma dose rate per station, µSv/h | German BfS/IMIS OGC service: the 1,676-probe German network (`opendata:odlinfo_odl_1h_latest`) and the live EURDEP mirror, 17,384 stations in 44 countries (`opendata:eurdep_latestValue`); EPA RadNet, 140 fixed monitors across the United States, 131 with a dose rate, one per city (per-monitor monthly CSV) | hourly |
 | **Civil air traffic** | Aircraft count, emergency indications and special-mission type presence in 14 CBRN-relevant geographies plus 2 health controls | `api.adsb.lol` point queries, public ADS-B | 5 min |
 | **Public vocabulary** | Counts of CBRN event words by place, per hour | the watch's public post stream and news index | hourly buckets |
 | **Seismic** | Underground detonation candidates: location against the seven test sites where a test remains possible, depth, and the agency's classification | USGS ComCat significant-week and all-day feeds | 5 min |
@@ -73,6 +73,20 @@ public radiation cluster may fire per six hours; suppressed ones are recorded at
 A network that stops answering for three consecutive polls emits a
 `watch`-level availability event. Blindness is visible; it is never an
 all-clear.
+
+**Sparse networks ask agreement of time instead of space.** EPA RadNet is one
+monitor per city, hundreds of kilometres apart, so no monitor has neighbours
+to move with. Its record (measured 19 Sept 2026: 131 dose-rate monitors,
+1.59 million hourly readings since January 2025) has a highest hour of
+0.32 µSv/h and a highest ratio to a monitor's own median of 5.75× (radon
+washout in rain): the station threshold above was met zero times. So on RadNet
+one departing hour is `elevated` (the 95 % bound from that record is about two
+a year across the network, inside the twelve-a-year budget), a second
+consecutive hour or a second monitor is `high`, and ≥10 µSv/h held for two
+hours is `critical`. An episode is keyed to its first hour, so the confirming
+hour raises the same event. EPA publishes only hours it has approved, so a real
+spike may be held for review before it appears: silence from RadNet is not an
+all-clear, and the network's staleness is watched like the others.
 
 ## 4. Aircraft ladder — voids, not exodus
 
@@ -155,9 +169,12 @@ raises confidence in the *observation*, not in its cause.
 
 ## 8. What this cannot see
 
-- **Coverage is European.** Gamma telemetry is the European reporting networks;
-  there is no equivalent global open feed. A normal reading asserts nothing
-  outside the monitored area.
+- **Gamma coverage is Europe and the United States.** The European networks
+  and EPA RadNet; nothing over East or South Asia, the Middle East, Russia or
+  the southern hemisphere, because no open near-real-time network publishes
+  there (Safecast's open API is volunteer, sparse and mostly stale; Japan's NRA
+  posts have no data feed). A normal reading asserts nothing outside the
+  monitored area.
 - **Seismic sees underground tests at known sites.** An atmospheric or
   high-altitude burst leaves no catalogued event; a test at a site not listed
   is caught only when USGS classifies it; a test small enough to fall below the
@@ -203,5 +220,7 @@ dynamic, so the collector sends at most one request per 1.2 seconds and backs
 off on 429. NRC feeds require a non-browser User-Agent and intermittently deny
 bursts; the registry's backoff covers it. CTBTO's IMS network is restricted by
 treaty and is not used. ProMED moved its reports behind a subscription and is
-not used. EPA RadNet publishes laboratory data, not near-real-time telemetry,
-and is not used.
+not used. EPA RadNet's near-real-time gamma is read from its per-monitor
+monthly CSV service (`radnet.epa.gov/cdx-radnet-rest`), 140 small requests an
+hour; EPA publishes no monitor coordinates, so `config/radnet-monitors.json`
+places each monitor at its city.
