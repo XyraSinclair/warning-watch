@@ -8,7 +8,10 @@ if (process.env.EWS_WATCH_ENV_PATH) loadEnvFile(process.env.EWS_WATCH_ENV_PATH);
 const { KIND, openCbrnDb, haversineKm, writeAlarmState, buildCbrnEvent, insertCbrnEvent } = require('./cbrn_lib');
 const { regions } = require('../config/cbrn-regions.json');
 const lexicon = require('../config/cbrn-lexicon.json');
-const SOURCES = ['nws-civil-alerts', 'nrc-events', 'nrc-reactor-status', 'faa-tfr', 'who-outbreaks', 'ecdc-threats', 'healthmap-alerts', 'iaea-news'];
+const { assessSeismicEvent, SHALLOW_KM } = require('../server/detonation-rule');
+const SOURCES = ['nws-civil-alerts', 'nrc-events', 'nrc-reactor-status', 'faa-tfr', 'who-outbreaks', 'ecdc-threats', 'healthmap-alerts', 'iaea-news', 'usgs-significant', 'usgs-relevant'];
+// A catalogue event older than this is history, not a detection.
+const SEISMIC_MAX_AGE_MS = 7 * 24 * 3600000;
 const RANK = { watch: 1, elevated: 3, high: 4, critical: 5 };
 
 function options(argv, minutes = 1440) {
@@ -40,9 +43,9 @@ function detect(watch, settings, now = Date.now()) {
   const trips = [];
   const since = now - settings.minutes * 60000;
   const prior = watch.prepare('SELECT observation, observed_at FROM watch_evidence WHERE source_id = ? AND external_id = ? AND observed_at <= ? ORDER BY observed_at DESC, id DESC LIMIT 1');
-  const emit = (row, observation, level, title, message, classification, keys = [row.external_id]) => {
+  const emit = (row, observation, level, title, message, classification, keys = [row.external_id], { kind = KIND.OFFICIAL_NOTICE, keySource = row.source_id, occurredAt = new Date(row.observed_at).toISOString() } = {}) => {
     summary.matched[row.source_id] += 1;
-    events.push(buildCbrnEvent({ kind: KIND.OFFICIAL_NOTICE, level, occurredAt: new Date(row.observed_at).toISOString(), title, message, source: row.source_id, publicUrl: observation.url, keyParts: [row.source_id, ...keys].map(encodeURIComponent), payload: { source_id: row.source_id, external_id: row.external_id, source_url: observation.url ?? null, ...classification } }));
+    events.push(buildCbrnEvent({ kind, level, occurredAt, title, message, source: row.source_id, publicUrl: observation.url, keyParts: [keySource, ...keys].map(encodeURIComponent), payload: { source_id: row.source_id, external_id: row.external_id, source_url: observation.url ?? null, ...classification } }));
   };
   for (const source of SOURCES) {
     summary.heads[source] = watch.prepare('SELECT count(*) AS n FROM watch_items WHERE source_id = ?').get(source).n;
@@ -85,6 +88,35 @@ function detect(watch, settings, now = Date.now()) {
           emit(row, o, 1, `New airspace restriction near ${region.name}`, `First observed FAA TFR ${distance.toFixed(1)} km from ${region.name}; threshold: distance <= 80 km.\nFAA title (verbatim): ${d.title ?? o.title ?? 'Not supplied'}\nState (verbatim): ${d.state ?? 'Not supplied'}\nModification time (verbatim; source timezone): ${d.lastModified ?? 'Not supplied'}`, { title: d.title ?? o.title ?? null, state: d.state ?? null, lastModified: d.lastModified ?? null, region: region.id, centroidLat: d.centroidLat, centroidLon: d.centroidLon, distance_km: distance }, [row.external_id, region.id]);
           states.push({ series: `fusion:${region.id}`, method: 'window', state: { region: region.id, timestamp: new Date(row.observed_at).toISOString(), occurred_at: new Date(row.observed_at).toISOString(), kind: KIND.OFFICIAL_NOTICE, level: 1, source_id: source, lat: d.centroidLat, lon: d.centroidLon } });
         }
+      } else if (source === 'usgs-significant' || source === 'usgs-relevant') {
+        const [lon, lat, depthKm] = Array.isArray(d.coordinates) ? d.coordinates : [];
+        const occurredMs = Date.parse(o.occurredAt);
+        if (!Number.isFinite(occurredMs) || now - occurredMs > SEISMIC_MAX_AGE_MS) continue;
+        const verdict = assessSeismicEvent({ classification: d.classification, magnitude: d.magnitude, lat, lon, depthKm });
+        if (!verdict) continue;
+        const magnitude = `M${Number(d.magnitude).toFixed(1)}`;
+        const where = verdict.site ? `${verdict.distanceKm.toFixed(0)} km from the ${verdict.site.name} (${verdict.site.country})` : d.place || 'location as catalogued';
+        const at = `${new Date(occurredMs).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+        const depthText = Number.isFinite(depthKm) ? `${depthKm} km` : 'not supplied';
+        const limits = 'A seismic location is not confirmation of a nuclear test, and an atmospheric burst would not appear here.';
+        let title;
+        let message;
+        if (verdict.rule === 'agency_classified_nuclear') {
+          title = `USGS classifies a ${magnitude} seismic event as a nuclear explosion${verdict.site ? `, ${where}` : ''}`;
+          message = `USGS catalogued a ${magnitude} event at ${at}, ${d.place || 'place not supplied'}, depth ${depthText}, classification "nuclear explosion", review status ${d.reviewStatus || 'not supplied'}. The agency's own classification is the strongest open-source seismic evidence there is. ${limits}`;
+        } else if (verdict.rule === 'agency_classified_explosion') {
+          title = `USGS classifies a ${magnitude} seismic event as an explosion: ${d.place || 'place not supplied'}`;
+          message = `USGS catalogued a ${magnitude} event at ${at}, ${d.place || 'place not supplied'}, as an explosion, not an earthquake, away from any known nuclear test site. Explosions this large are rare: none of M4 or more was catalogued worldwide in the year to September 2026. ${limits}`;
+        } else {
+          const depthClause = verdict.depth === 'shallow'
+            ? `depth ${depthText}, within ${SHALLOW_KM} km of the surface as every catalogued nuclear test has been. Since 2000 one natural earthquake of this size has been catalogued this shallow within 50 km of any known test site, and it was induced by the 2017 test.`
+            : verdict.depth === 'unconstrained'
+              ? `depth not yet determined (USGS placeholder ${depthText}). Natural earthquakes of this size occur within 50 km of a known test site about once a year; a determined depth will raise or clear this.`
+              : `depth ${depthText}, well below any test depth, so most likely a natural earthquake.`;
+          title = verdict.depth === 'shallow' ? `Shallow ${magnitude} seismic event ${where}` : `${magnitude} seismic event ${where}`;
+          message = `USGS located a ${magnitude} event at ${at}, ${where}, ${depthClause} USGS classification: ${d.classification}; review status ${d.reviewStatus || 'not supplied'}. ${limits}`;
+        }
+        emit(row, o, verdict.level, title, message, { rule: verdict.rule, magnitude: d.magnitude, depth_km: Number.isFinite(depthKm) ? depthKm : null, depth: verdict.depth, classification: d.classification, review_status: d.reviewStatus ?? null, site: verdict.site?.id ?? null, distance_km: verdict.distanceKm == null ? null : +verdict.distanceKm.toFixed(1) }, [row.external_id], { kind: KIND.SEISMIC_EVENT, keySource: 'usgs', occurredAt: new Date(occurredMs).toISOString() });
       } else if (source === 'who-outbreaks' || source === 'ecdc-threats') {
         const matched = agents.filter(([, re]) => re.test(String(o.title || '').normalize('NFKC'))).map(([term]) => term);
         if (!matched.length) continue;

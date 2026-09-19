@@ -55,7 +55,7 @@ async function publish(server, topic, event, dryRun) {
     // The tag is the first thing a subscriber sees on a lock screen, so it
     // must not tell a radiation alert that it is about aeroplanes.
     Tags: event.cohort === 'cbrn'
-      ? (event.kind === 'cbrn_radiation_anomaly' ? 'radioactive,warning' : 'warning,skull')
+      ? (event.kind === 'cbrn_radiation_anomaly' ? 'radioactive,warning' : event.kind === 'cbrn_seismic_event' ? 'radioactive,collision' : 'warning,skull')
       : 'rotating_light,airplane',
   };
   const token = String(process.env.EWS_NTFY_TOKEN || '').trim();

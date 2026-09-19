@@ -22,6 +22,7 @@ physical thing changed" to "a person knows, with the uncertainty stated."
 | **Radiological telemetry** | Gamma dose rate per station, µSv/h | German BfS/IMIS OGC service: the 1,676-probe German network (`opendata:odlinfo_odl_1h_latest`) and the live EURDEP mirror, 17,384 stations in 44 countries (`opendata:eurdep_latestValue`) | hourly |
 | **Civil air traffic** | Aircraft count, emergency indications and special-mission type presence in 14 CBRN-relevant geographies plus 2 health controls | `api.adsb.lol` point queries, public ADS-B | 5 min |
 | **Public vocabulary** | Counts of CBRN event words by place, per hour | the watch's public post stream and news index | hourly buckets |
+| **Seismic** | Underground detonation candidates: location against the seven test sites where a test remains possible, depth, and the agency's classification | USGS ComCat significant-week and all-day feeds | 5 min |
 | **Authority** | Official CBRN notices and instructions | NWS CAP (radiological/hazmat/nuclear-plant events), NRC event notifications with emergency class, NRC reactor power, FAA TFRs, WHO Disease Outbreak News, ECDC CDTR, IAEA news, HealthMap | 10 min – 1 h |
 
 All four families write into one table — `alert_events` with `cohort='cbrn'` —
@@ -116,6 +117,31 @@ Emergency* or *General Emergency* relay at `high`; everything else is `watch`,
 because non-emergency NRC reports are routine and numerous. Reactor power drops
 and airspace restrictions near a listed region are `watch` only.
 
+## 6a. Seismic — the detonation rule
+
+Every underground nuclear test since 2006 is in the USGS catalogue as
+`nuclear explosion` at depth 0. The rule (`server/detonation-rule.js`,
+sites in `config/nuclear-test-sites.json`) is three tiers, each measured
+against the catalogue since 2000 on 19 Sept 2026:
+
+- **USGS classifies the event `nuclear explosion`**: `critical`, anywhere. All
+  six North Korean tests.
+- **M ≥ 3.5 within a test-site geofence** (50 km; 60 km at Nevada): `high` if
+  the depth is within 5 km of the surface or the type is `explosion`;
+  `elevated` if USGS has not yet constrained the depth (its 10 km placeholder);
+  `watch` if the depth is well determined and deep. In 26.7 years this is one
+  `high` that was not a test (the M3.6 aftershock the 2017 test induced) and
+  eight `elevated`, about one every three years, all placeholder-depth
+  earthquakes near Lop Nur, Ras Koh and Kharan. A depth revision raises or
+  clears each of them.
+- **USGS classifies an event `explosion` at M ≥ 4**, anywhere: `elevated`.
+  One in ten years, the April 2025 Kirzhach ammunition-depot blast.
+
+Each catalogue revision is a new observation and the same event key, so a first
+automatic solution that later gains a depth or a classification escalates in
+place. Events older than seven days are history and never alert. The collector
+keeps M ≥ 3.5 events inside a geofence that its usual M ≥ 4.5 filter would drop.
+
 ## 7. Fusion — coincidence across independent instruments
 
 When two *different* instrument families report the same place and time — a
@@ -130,6 +156,11 @@ raises confidence in the *observation*, not in its cause.
 - **Coverage is European.** Gamma telemetry is the European reporting networks;
   there is no equivalent global open feed. A normal reading asserts nothing
   outside the monitored area.
+- **Seismic sees underground tests at known sites.** An atmospheric or
+  high-altitude burst leaves no catalogued event; a test at a site not listed
+  is caught only when USGS classifies it; a test small enough to fall below the
+  global network's threshold is missed. The catalogue's first automatic
+  solution can lag the event by ten minutes to an hour.
 - **Aircraft sampling is a fixed roster**, not a global picture, and says
   nothing about cargo, mission or passengers.
 - **Vocabulary is not reporting.** It is a count of words on one platform and

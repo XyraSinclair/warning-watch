@@ -1,0 +1,12 @@
+{
+  "notes": "Underground nuclear test sites where a test remains physically possible. Closed and dismantled sites (Semipalatinsk, closed 1991; Mururoa and Fangataufa, dismantled 1998) are left out: they add false-alarm area and no detection. A test at a site not listed here is caught only when USGS itself classifies it. Base rates in scripts/detect_cbrn_notices.js were measured against the USGS catalogue on 19 Sept 2026: M>=3.5 within 50 km of these sites since 2000.",
+  "sites": [
+    {"id": "punggye-ri", "name": "Punggye-ri nuclear test site", "country": "North Korea", "lat": 41.28, "lon": 129.08, "radius_km": 50, "last_test": "2017-09-03"},
+    {"id": "lop-nur", "name": "Lop Nur nuclear test site", "country": "China", "lat": 41.55, "lon": 88.70, "radius_km": 50, "last_test": "1996-07-29"},
+    {"id": "novaya-zemlya", "name": "Novaya Zemlya nuclear test site", "country": "Russia", "lat": 73.35, "lon": 54.80, "radius_km": 50, "last_test": "1990-10-24"},
+    {"id": "nnss", "name": "Nevada National Security Site", "country": "United States", "lat": 37.12, "lon": -116.05, "radius_km": 60, "last_test": "1992-09-23"},
+    {"id": "pokhran", "name": "Pokhran test range", "country": "India", "lat": 27.08, "lon": 71.75, "radius_km": 50, "last_test": "1998-05-13"},
+    {"id": "ras-koh", "name": "Ras Koh (Chagai) test site", "country": "Pakistan", "lat": 28.80, "lon": 64.95, "radius_km": 50, "last_test": "1998-05-28"},
+    {"id": "kharan", "name": "Kharan Desert test site", "country": "Pakistan", "lat": 28.36, "lon": 63.86, "radius_km": 50, "last_test": "1998-05-30"}
+  ]
+}

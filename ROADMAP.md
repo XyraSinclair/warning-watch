@@ -85,7 +85,7 @@ the public.
 | Layer | Today | Gap |
 |---|---|---|
 | Ambient gamma | BfS + EURDEP mirror, hourly, coherence-gated | **Europe only.** Nothing over North America, East or South Asia, the Middle East |
-| Detonation | USGS catalogue kept as verification only | No rule of its own: no test-site geofence, no use of the catalogue's explosion classifications |
+| Detonation | Rule live 19 Sept: classification `nuclear explosion` → critical; M ≥ 3.5 in a test-site geofence → high when shallow, elevated when depth unconstrained; `explosion` M ≥ 4 anywhere → elevated (CBRN-WATCH.md § 6a) | Replayed on the catalogue since 2000: all six DPRK tests critical, one non-test high, eight elevated in 26.7 years. Not yet seen: a live first-solution's latency and typing |
 | Facility events | NRC event notifications + reactor status | United States only |
 | Official warning | NWS CAP nuclear / radiological / hazmat types, relayed verbatim at critical | United States only |
 | Agency reporting | IAEA news (operator surface) | Latency unmeasured |
@@ -98,9 +98,9 @@ README and the section below say laboratory data only — re-check); national CA
 beyond NWS; USGS event-type and depth fields against a geofence of the known
 test sites. CTBTO IMS and IAEA USIE stay out: treaty- and member-restricted.
 
-Order within rung 4: detonation rule first (one feed already ingested, highest
-consequence, lowest false-alarm surface), then gamma coverage outside Europe,
-then non-US official warnings.
+Order within rung 4: detonation rule first (done 19 Sept: one feed already
+ingested, highest consequence, lowest false-alarm surface), then gamma coverage
+outside Europe, then non-US official warnings.
 
 ## CBRN alarm layer (implemented 10 September 2026)
 

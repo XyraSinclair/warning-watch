@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { XMLParser, XMLValidator } = require('fast-xml-parser');
+const { nearTestSiteCandidate } = require('./detonation-rule');
 
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_ITEMS = 500;
@@ -56,7 +57,7 @@ const SOURCE_DEFINITIONS = [
   definition('usgs-significant', 'USGS significant seismic events', 'radiation_geophysics', 'seismic_catalog', 'usgs-earthquake-catalog', 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_week.geojson', 300, 1800,
     'R15: Significant past-week catalog; agency classification and revisions only. A seismic event is not nuclear confirmation; absence cannot exclude an airburst.', { adapter: 'usgs' }),
   definition('usgs-relevant', 'USGS relevant daily seismic events', 'radiation_geophysics', 'seismic_catalog', 'usgs-earthquake-catalog', 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson', 300, 1800,
-    'R15: Past-day events filtered to magnitude >=4.5 or agency-classified non-earthquakes. Same catalog as significant feed, not independent evidence; small earthquakes are not an exhaustive explosion screen.', { adapter: 'usgs', filterRelevant: true }),
+    'R15: Past-day events filtered to magnitude >=4.5, agency-classified non-earthquakes, or magnitude >=3.5 within a known nuclear test site geofence. Same catalog as significant feed, not independent evidence; small earthquakes are not an exhaustive explosion screen.', { adapter: 'usgs', filterRelevant: true }),
   definition('noaa-kp', 'NOAA planetary geomagnetic index', 'confound_health', 'space_weather_measurement', 'noaa-swpc', 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json', 900, 21600,
     'R16: Three-hour Kp measurement bins and station counts, not an EMP detector. Source time_tag is UTC; publication time is not supplied.', { adapter: 'noaa', sampleStaleSeconds: 28800 }),
   definition('gdelt-reporting', 'GDELT nuclear and escalation reporting', 'public_reporting', 'news_index', 'gdelt-syndicated-reporting', 'https://api.gdeltproject.org/api/v2/doc/doc', 1800, 7200,
@@ -440,7 +441,9 @@ function usgs(def, doc) {
   requireShape(doc.features.length <= 10000, 'USGS feature cap exceeded');
   const selected = doc.features.filter(f => {
     requireShape(f.properties && typeof f.id === 'string' && typeof f.properties.type === 'string', 'USGS event identity/classification missing');
-    return !def.filterRelevant || finite(f.properties.mag) >= 4.5 || f.properties.type !== 'earthquake';
+    if (!def.filterRelevant || finite(f.properties.mag) >= 4.5 || f.properties.type !== 'earthquake') return true;
+    const [lon, lat] = Array.isArray(f.geometry?.coordinates) ? f.geometry.coordinates : [];
+    return nearTestSiteCandidate(finite(f.properties.mag), finite(lat), finite(lon));
   }).sort((a, b) => (b.properties.time || 0) - (a.properties.time || 0) || a.id.localeCompare(b.id));
   return result(selected.slice(0, MAX_ITEMS).map(f => {
     const p = f.properties;

@@ -53,6 +53,8 @@ const KIND = {
   LEXICAL_BURST: 'cbrn_lexical_burst',
   // Authority.
   OFFICIAL_NOTICE: 'cbrn_official_notice',
+  // Seismic catalogue: a detonation candidate by location, depth, or agency classification.
+  SEISMIC_EVENT: 'cbrn_seismic_event',
   // Cross-family agreement (written only by the fusion pass).
   FUSED: 'cbrn_fused',
 };
