@@ -133,7 +133,7 @@ function initTempDb(dbPath) {
 
 async function assertLocalDispatchSkipsRawTakeoffTelemetry() {
   const { dispatchPendingAlerts, upsertSubscriber } = require(path.join(ROOT_DIR, 'server', 'local-notifications'));
-  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'apocalypse-ews-local-dispatch-')), 'ews.sqlite');
+  const dbPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'warning-watch-local-dispatch-')), 'ews.sqlite');
   const db = new Database(dbPath);
   db.exec(fs.readFileSync(path.join(ROOT_DIR, 'schema.sql'), 'utf8'));
   const env = {
@@ -220,7 +220,7 @@ async function assertLocalDispatchSkipsRawTakeoffTelemetry() {
 
 
 async function assertTakeoffRateDetection() {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'apocalypse-ews-takeoff-rate-'));
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'warning-watch-takeoff-rate-'));
   const dbPath = path.join(tempRoot, 'ews.sqlite');
   const snapshotPath = path.join(tempRoot, 'dashboard.json');
   const db = new Database(dbPath);
@@ -337,7 +337,7 @@ async function assertTakeoffRateDetection() {
 }
 
 async function assertAlertEventDetectionPreservesDispatchState() {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'apocalypse-ews-alert-state-'));
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'warning-watch-alert-state-'));
   const dbPath = path.join(tempRoot, 'ews.sqlite');
   const snapshotPath = path.join(tempRoot, 'dashboard.json');
   const db = new Database(dbPath);
@@ -461,7 +461,7 @@ async function assertAlertEventDetectionPreservesDispatchState() {
 }
 
 async function assertSingleTakeoffDuringConcurrentAnomalySuppressed() {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'apocalypse-ews-single-takeoff-'));
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'warning-watch-single-takeoff-'));
   const dbPath = path.join(tempRoot, 'ews.sqlite');
   const snapshotPath = path.join(tempRoot, 'dashboard.json');
   const db = new Database(dbPath);
@@ -532,7 +532,7 @@ async function assertSingleTakeoffDuringConcurrentAnomalySuppressed() {
 }
 
 async function assertConcurrentAnomalyRequiresReadyBaseline() {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'apocalypse-ews-concurrent-readiness-'));
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'warning-watch-concurrent-readiness-'));
   const dbPath = path.join(tempRoot, 'ews.sqlite');
   const snapshotPath = path.join(tempRoot, 'dashboard.json');
   const db = new Database(dbPath);
@@ -721,7 +721,7 @@ async function assertAlertEventBridgePosts(dbPath, token, statusPath) {
 
 
 async function main() {
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'apocalypse-ews-alert-smoke-'));
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'warning-watch-alert-smoke-'));
   const publishedDir = path.join(tempRoot, 'published');
   const dbPath = path.join(tempRoot, 'ews.sqlite');
   const bridgeStatusPath = path.join(tempRoot, 'bridge-status.json');

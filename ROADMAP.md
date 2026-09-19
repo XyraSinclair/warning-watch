@@ -2,15 +2,89 @@
 
 **Strategic redesign, 5 September 2026, revised with Fable and Kimi:** the
 continuous digital watch, agent tasking, and observation-first work sequence
-are in [https://github.com/XyraSinclair/apocalypse-ews/blob/main/NUCLEAR-WARNING-STRATEGY.md](https://github.com/XyraSinclair/apocalypse-ews/blob/main/NUCLEAR-WARNING-STRATEGY.md).
+are in [https://github.com/XyraSinclair/warning-watch/blob/main/NUCLEAR-WARNING-STRATEGY.md](https://github.com/XyraSinclair/warning-watch/blob/main/NUCLEAR-WARNING-STRATEGY.md).
 The concrete collection register is
-[https://github.com/XyraSinclair/apocalypse-ews/blob/main/DIGITAL-SIGNAL-REGISTER.md](https://github.com/XyraSinclair/apocalypse-ews/blob/main/DIGITAL-SIGNAL-REGISTER.md).
+[https://github.com/XyraSinclair/warning-watch/blob/main/DIGITAL-SIGNAL-REGISTER.md](https://github.com/XyraSinclair/warning-watch/blob/main/DIGITAL-SIGNAL-REGISTER.md).
 The implementation roadmap below records the aviation-anomaly approach. Its
 statistical goals must not be read as validated nuclear-warning capability.
 
 The initial continuous watch is implemented separately from the aviation
 calibration roadmap. Its enabled sources, bounds, operator-only assessments,
 and remaining coverage limits are documented in [OPERATIONS.md](OPERATIONS.md).
+
+## State of the watch, 19 September 2026 (measured on the live box)
+
+The project is renamed **warning-watch** to match its domain. This audit is the
+baseline the climb below is judged against; every number was read from the live
+system that day, not from documentation.
+
+**Holding.** Ingestion 99.93 % slot completeness over 30 days on all three
+aviation cohorts; 4,866 of 5,248 gamma stations armed, both networks fresh;
+CBRN refresh, daily integrity-checked backups, tunnel, disk and load all
+healthy; ntfy round-trip canary passing.
+
+**Not infrastructure-grade.**
+
+| # | Defect | Measurement | State |
+|---|---|---|---|
+| A1 | The page's only subscribe instruction named an invalid ntfy topic | `warning.watch` is not a legal topic; alerts published elsewhere | fixed 19 Sept |
+| A2 | The page promised email, SMS and web push | no provider credentials on the box, no signup surface; the canary passes those channels by skipping them | claim removed 19 Sept; canary still reports a skip as `ok` |
+| A3 | Public alert rate ~20× target | 20 public-tier alerts in 24 days (10 elevated, 8 high, 1 critical, 1 notice) against "roughly monthly"; 19 of 20 from takeoff detectors | open |
+| A4 | `takeoff_anomaly` bypasses the 11 Sept ladder | severity comes straight from the concurrent emergency level; "4 takeoffs during emergency level 4" published as HIGH | open |
+| A5 | Ladder still on fallback thresholds | 198 of the 500 scored slots it needs | open (time, or backfill the score record) |
+| A6 | Count data scored as sigma | "5 takeoffs vs 0 expected, 5σ" on a near-zero baseline is not a rare event | open |
+| A7 | Nightly self-test failed 10 consecutive nights unheard | takeoff replay fired 9 against a 0.2/day budget; the watchdog suppresses repeat pages while the problem set is unchanged | open |
+| A8 | Alert copy leaks internal identifiers | `global_military_aircraft` in public text | open |
+| A9 | Fresh-box bootstrap never enabled the CBRN or self-test timers | `deploy/bootstrap.sh` timer list | fixed 19 Sept |
+| A10 | README station count unexplained | README: 17,384 EURDEP stations; live: 3,658 reporting | open |
+
+### The climb, in order
+
+Each rung closes before the next opens; each is judged by a number.
+
+1. **Truthful surface** (A1, A2, A9 — done). Every sentence on the page is
+   checked against the live system.
+2. **Silence the aviation noise** (A3–A6, A8). Aviation alerts stay on the
+   operator surface until the detector earns the public tier: route
+   `takeoff_anomaly` through the empirical ladder, replace sigma on counts with
+   a Poisson-tail score plus an absolute floor that scales with the baseline,
+   backfill the score record so the ladder leaves fallback. Exit: the replay
+   self-test passes and the 90-day public alert count is ≤ 3.
+3. **A watchdog that cannot go quiet** (A7, A2's canary). A failure that
+   persists escalates instead of being suppressed; a skipped channel reports
+   `skipped`, never `ok`. Exit: an injected persistent failure re-pages on
+   schedule.
+4. **Nuclear monitoring worth the name.** Below.
+5. **Published firing record.** Every public alert, its ladder, and its
+   after-the-fact verdict on the page. Trust is the empirical alert frequency
+   matching the advertised one.
+
+### Nuclear monitoring: what exists, what is missing
+
+Objectives, in priority order: (N1) a detonation or major release anywhere is
+reported within the hour; (N2) near-zero false public alarms; (N3) open sources
+only; (N4) posture change is visible to the operator before it is visible to
+the public.
+
+| Layer | Today | Gap |
+|---|---|---|
+| Ambient gamma | BfS + EURDEP mirror, hourly, coherence-gated | **Europe only.** Nothing over North America, East or South Asia, the Middle East |
+| Detonation | USGS catalogue kept as verification only | No rule of its own: no test-site geofence, no use of the catalogue's explosion classifications |
+| Facility events | NRC event notifications + reactor status | United States only |
+| Official warning | NWS CAP nuclear / radiological / hazmat types, relayed verbatim at critical | United States only |
+| Agency reporting | IAEA news (operator surface) | Latency unmeasured |
+| Posture | special-mission aircraft presence (operator surface) | No baseline for strategic command-post or tanker activity |
+
+Candidate sources, **each to be verified by a live fetch before it is designed
+around** (none is asserted here as working): Safecast open API for gamma outside
+Europe; Japan NRA monitoring posts; EPA RadNet near-real-time gamma (the
+README and the section below say laboratory data only — re-check); national CAP feeds
+beyond NWS; USGS event-type and depth fields against a geofence of the known
+test sites. CTBTO IMS and IAEA USIE stay out: treaty- and member-restricted.
+
+Order within rung 4: detonation rule first (one feed already ingested, highest
+consequence, lowest false-alarm surface), then gamma coverage outside Europe,
+then non-US official warnings.
 
 ## CBRN alarm layer (implemented 10 September 2026)
 

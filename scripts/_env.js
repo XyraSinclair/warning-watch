@@ -1,5 +1,5 @@
 // Shared env loading for scripts: repo root, dotenv-file layering
-// (/etc/apocalypse-ews.env then .env, process.env winning), and the
+// (/etc/warning-watch.env then .env, process.env winning), and the
 // dashboard-URL validation used by verify_dashboard_bundle.js.
 //
 // Deliberately no derivation of webhook URLs from display URLs — deriving
@@ -10,7 +10,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
-const SERVICE_ENV_PATH = "/etc/apocalypse-ews.env";
+const SERVICE_ENV_PATH = "/etc/warning-watch.env";
 const PROJECT_ENV_PATH = path.join(REPO_ROOT, ".env");
 const DEFAULT_ENV_FILES = [SERVICE_ENV_PATH, PROJECT_ENV_PATH];
 

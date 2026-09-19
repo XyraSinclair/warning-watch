@@ -6,11 +6,11 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=xyra
-WorkingDirectory=/opt/dev/apocalypse-ews
+WorkingDirectory=/opt/dev/warning-watch
 Environment=NODE_ENV=production
 Environment=EWS_WATCH_MODEL=google/gemini-2.5-flash-lite
 Environment=EWS_WATCH_DAILY_BUDGET_USD=0.10
-EnvironmentFile=-/etc/apocalypse-ews-watch.env
+EnvironmentFile=-/etc/warning-watch-sources.env
 ExecStart=/usr/bin/node scripts/run_watch.js
 TimeoutStartSec=240
 TimeoutStopSec=10

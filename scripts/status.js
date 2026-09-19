@@ -120,26 +120,26 @@ function systemdState(unit) {
 function serviceStates() {
   if (process.platform === 'darwin') {
     return [
-      launchdState('com.xyra.apocalypse-ews.refresh'),
-      launchdState('com.xyra.apocalypse-ews.server'),
-      launchdState('com.xyra.apocalypse-ews.repair'),
+      launchdState('com.xyra.warning-watch.refresh'),
+      launchdState('com.xyra.warning-watch.server'),
+      launchdState('com.xyra.warning-watch.repair'),
     ];
   }
   return [
-    systemdState('apocalypse-ews.service'),
-    systemdState('apocalypse-ews-refresh.timer'),
-    systemdState('apocalypse-ews-refresh-imports.timer'),
-    systemdState('apocalypse-ews-repair.timer'),
-    systemdState('apocalypse-ews-watchdog.timer'),
-    systemdState('apocalypse-ews-backup.timer'),
+    systemdState('warning-watch.service'),
+    systemdState('warning-watch-refresh.timer'),
+    systemdState('warning-watch-refresh-imports.timer'),
+    systemdState('warning-watch-repair.timer'),
+    systemdState('warning-watch-watchdog.timer'),
+    systemdState('warning-watch-backup.timer'),
     systemdState('cloudflared.service'),
     systemdState('ntfy.service'),
-    systemdState('apocalypse-ews-canary.timer'),
-    systemdState('apocalypse-ews-canary.service'),
-    systemdState('apocalypse-ews-selftest.timer'),
-    systemdState('apocalypse-ews-selftest.service'),
-    systemdState('apocalypse-ews-cbrn.timer'),
-    systemdState('apocalypse-ews-cbrn.service'),
+    systemdState('warning-watch-canary.timer'),
+    systemdState('warning-watch-canary.service'),
+    systemdState('warning-watch-selftest.timer'),
+    systemdState('warning-watch-selftest.service'),
+    systemdState('warning-watch-cbrn.timer'),
+    systemdState('warning-watch-cbrn.service'),
   ];
 }
 
@@ -185,7 +185,7 @@ function watchReport() {
     const sourceProblems = snapshot.sources.filter((source) => source.enabled && source.health !== 'healthy')
       .map((source) => ({ id: source.id, health: source.health, error: source.lastError, recovery: source.recovery }));
     const services = process.platform === 'darwin' ? [] : [
-      systemdState('apocalypse-ews-watch.timer'), systemdState('apocalypse-ews-watch.service'),
+      systemdState('warning-watch-sources.timer'), systemdState('warning-watch-sources.service'),
     ];
     return {
       available: true, ...snapshot.counts, run: snapshot.run, agent: snapshot.agent,
@@ -322,7 +322,7 @@ const MIN_COMPLETENESS_PCT_30D = 98;
 
 const problems = [];
 if (!report.polling) {
-  problems.push('poll status missing — check apocalypse-ews-refresh.service');
+  problems.push('poll status missing — check warning-watch-refresh.service');
 } else {
   if (report.polling.lastError) problems.push(`refresh pipeline: ${report.polling.lastError}`);
   if (!Number.isFinite(report.polling.pollAgeMinutes) || report.polling.pollAgeMinutes > 10) {
@@ -346,7 +346,7 @@ for (const cohort of report.cohorts) {
       ? (Date.now() - Date.parse(provenance.firstRowSample)) / 3600000
       : 0;
     if (provenance.liveAgeMinutes !== null && provenance.liveAgeMinutes > MAX_LIVE_AGE_MINUTES) {
-      problems.push(`${cohort.label}: live ingestion stale (${provenance.liveAgeMinutes}m > ${MAX_LIVE_AGE_MINUTES}m bound) — check apocalypse-ews-refresh.timer`);
+      problems.push(`${cohort.label}: live ingestion stale (${provenance.liveAgeMinutes}m > ${MAX_LIVE_AGE_MINUTES}m bound) — check warning-watch-refresh.timer`);
     } else if (provenance.liveAgeMinutes === null && rowHistoryHours >= 24) {
       problems.push(`${cohort.label}: live provenance never recorded despite ${Math.round(rowHistoryHours)}h of rows — live ingestion is not writing ingest_slots`);
     }
@@ -370,7 +370,7 @@ if (report.cbrn) {
     problems.push(`cbrn: ${report.cbrn.error ?? 'status unavailable'}`);
   } else {
     if (report.cbrn.runAgeMinutes == null || report.cbrn.runAgeMinutes > 15) {
-      problems.push(`cbrn: refresh stale (${report.cbrn.runAgeMinutes}m > 15m bound) — check apocalypse-ews-cbrn.timer`);
+      problems.push(`cbrn: refresh stale (${report.cbrn.runAgeMinutes}m > 15m bound) — check warning-watch-cbrn.timer`);
     }
     for (const stage of report.cbrn.failedStages ?? []) {
       problems.push(`cbrn stage ${stage.stage}: ${stage.error}`);
@@ -388,7 +388,7 @@ if (report.cbrn) {
 if (report.backups) {
   if (!report.backups.dayCount) problems.push('no sqlite backups yet — run npm run backup');
   else if (report.backups.latestFiles < 5) problems.push(`latest backup day ${report.backups.latestDay} has ${report.backups.latestFiles}/5 databases`);
-  else if (report.backups.ageHours > 50) problems.push(`sqlite backups stale (${report.backups.ageHours}h) — check apocalypse-ews-backup.timer`);
+  else if (report.backups.ageHours > 50) problems.push(`sqlite backups stale (${report.backups.ageHours}h) — check warning-watch-backup.timer`);
 }
 report.verdict = problems.length ? { healthy: false, problems } : { healthy: true };
 

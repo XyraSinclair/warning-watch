@@ -1,5 +1,5 @@
 [Unit]
-Description=Daily Apocalypse EWS SQLite backups
+Description=Daily Warning Watch SQLite backups
 
 [Timer]
 OnCalendar=*-*-* 02:10:00

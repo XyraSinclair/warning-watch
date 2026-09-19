@@ -1,12 +1,12 @@
 #!/bin/bash
-# Apocalypse EWS — fresh-box bootstrap (Ubuntu 24.04, run as root).
+# Warning Watch — fresh-box bootstrap (Ubuntu 24.04, run as root).
 #
-#   curl -fsSL https://raw.githubusercontent.com/XyraSinclair/apocalypse-ews/main/deploy/bootstrap.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/XyraSinclair/warning-watch/main/deploy/bootstrap.sh | bash
 #   # or: bash deploy/bootstrap.sh   (from a checkout)
 #
 # Idempotent: safe to rerun until the system is green. Two secrets gate the
 # last mile and are printed as TODOs if absent:
-#   /etc/apocalypse-ews.env   — service secrets (restore from vault/backup,
+#   /etc/warning-watch.env   — service secrets (restore from vault/backup,
 #                               or fill the generated template)
 #   /etc/cloudflared/token    — tunnel token (export CLOUDFLARED_TUNNEL_TOKEN
 #                               before running, or place the file yourself)
@@ -15,12 +15,12 @@
 # recent history from the ADSBx archive on its own.
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/XyraSinclair/apocalypse-ews.git}"
+REPO_URL="${REPO_URL:-https://github.com/XyraSinclair/warning-watch.git}"
 # Fixed canonical layout: the systemd units in config/systemd/ hardcode
 # this user and path, so they are not knobs here.
-TARGET=/opt/dev/apocalypse-ews
+TARGET=/opt/dev/warning-watch
 RUN_USER=xyra
-ENV_FILE=/etc/apocalypse-ews.env
+ENV_FILE=/etc/warning-watch.env
 
 [ "$(id -u)" = 0 ] || { echo "run as root" >&2; exit 1; }
 
@@ -70,7 +70,7 @@ mkdir -p /etc/ntfy /var/lib/ntfy
 install -m 644 "$TARGET"/config/ntfy-server.yml /etc/ntfy/server.yml
 if [ ! -f /var/lib/ntfy/user.db ]; then
   echo "TODO: restore /var/lib/ntfy/user.db from backup, or create the publisher:"
-  echo "  ntfy user add --role=user ews && ntfy access ews 'apocalypse-ews-*' write-only"
+  echo "  ntfy user add --role=user ews && ntfy access ews 'warning-watch-*' write-only"
   echo "  ntfy token add ews   # -> EWS_NTFY_TOKEN in $ENV_FILE"
 fi
 
@@ -92,9 +92,9 @@ VITE_UNTRACKED_DASHBOARD_URL=/data/untracked-dashboard.json
 WEB_PUSH_VAPID_PUBLIC_KEY=FILL_ME
 WEB_PUSH_VAPID_PRIVATE_KEY=FILL_ME
 WEB_PUSH_CONTACT=mailto:xyra@exopriors.com
-EWS_NTFY_TOPIC=apocalypse-ews-alerts
+EWS_NTFY_TOPIC=warning-watch-alerts
 EWS_NTFY_SERVER=http://127.0.0.1:2586
-EWS_NTFY_OPS_TOPIC=apocalypse-ews-ops
+EWS_NTFY_OPS_TOPIC=warning-watch-ops
 EWS_NTFY_TOKEN=FILL_ME
 EWS_NTFY_PUBLIC_SERVER=https://ntfy.warning.watch
 ENV_EOF
@@ -134,14 +134,14 @@ fi
 systemctl enable --now ntfy
 [ -f /etc/cloudflared/token ] && systemctl enable --now cloudflared \
   || echo "HOLD: cloudflared not started (no token yet)"
-systemctl enable --now apocalypse-ews.service
-for timer in refresh refresh-imports repair backup watchdog canary watch; do
-  systemctl enable --now "apocalypse-ews-$timer.timer"
+systemctl enable --now warning-watch.service
+for timer in refresh refresh-imports repair backup watchdog canary sources cbrn selftest; do
+  systemctl enable --now "warning-watch-$timer.timer"
 done
 
 echo "--- verify"
 sleep 2
 curl -fsS http://127.0.0.1:3030/api/health && echo && echo "OK: backend healthy"
 echo "Optional: restore historical DBs from a backup day into $TARGET/data/"
-echo "  (stop timers first: systemctl stop 'apocalypse-ews-*.timer'), or let"
+echo "  (stop timers first: systemctl stop 'warning-watch-*.timer'), or let"
 echo "  the repair timer rebuild recent history from the ADSBx archive."

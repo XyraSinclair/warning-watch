@@ -78,7 +78,7 @@ def write_non_icao_cache(cache_path, timestamp_ms, point_rows):
 
 
 def assert_tracked_takeoff_requires_previous_ground_state():
-    with tempfile.TemporaryDirectory(prefix="apocalypse-ews-takeoff-ingest-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="warning-watch-takeoff-ingest-") as temp_dir:
         db_path = pathlib.Path(temp_dir) / "ews.sqlite"
         connection = open_db(db_path)
         try:
@@ -173,7 +173,7 @@ def assert_non_icao_takeoff_requires_previous_ground_state():
 
 
 def assert_non_icao_live_snapshot_persists_ground_state():
-    with tempfile.TemporaryDirectory(prefix="apocalypse-ews-non-icao-live-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="warning-watch-non-icao-live-") as temp_dir:
         temp_path = pathlib.Path(temp_dir)
         db_path = temp_path / "ews.sqlite"
         ground_cache = temp_path / "ground.bin"

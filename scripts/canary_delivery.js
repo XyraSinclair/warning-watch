@@ -34,7 +34,7 @@ function loadEnvFile(filePath) {
   }
 }
 
-loadEnvFile('/etc/apocalypse-ews.env');
+loadEnvFile('/etc/warning-watch.env');
 loadEnvFile(path.join(ROOT_DIR, '.env'));
 
 const PUBLIC_URL = String(process.env.EWS_PUBLIC_URL || 'https://warning.watch').replace(/\/+$/, '');

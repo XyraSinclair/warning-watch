@@ -1003,7 +1003,7 @@ function GetAlertsPanel() {
             <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy">Android</a>), tap <em>+ Subscribe to
             topic</em>, choose <em>Use another server</em>, and enter:
           </p>
-          <p className="channel-code"><code>https://ntfy.warning.watch/apocalypse-ews-alerts</code></p>
+          <p className="channel-code"><code>https://ntfy.warning.watch/warning-watch-alerts</code></p>
           <p>
             No account, no phone number, no vendor between you and the signal. The channel is served from this system&apos;s
             own infrastructure; publishing requires a private key, so nothing can spoof an alert onto it. Only elevated-and-above
@@ -1038,7 +1038,7 @@ function GetAlertsPanel() {
           <p>
             The instrument checks its own health every two minutes and publishes failures and
             recoveries to a separate operations channel:{' '}
-            <code>https://ntfy.warning.watch/apocalypse-ews-ops</code>. The dashboard above always shows the timestamp of the
+            <code>https://ntfy.warning.watch/warning-watch-ops</code>. The dashboard above always shows the timestamp of the
             last ingested data slot — if it is more than 75 minutes old, treat the instrument as down, not the sky as calm.
           </p>
         </article>
@@ -1532,7 +1532,7 @@ function AboutPanel({ selectedLabels }: { selectedLabels: string[] }) {
           The concept and reference implementation are{' '}
           <a href="https://ews.kylemcdonald.net/">Kyle McDonald&apos;s EWS</a>; this is an independent implementation and
           deployment, open source at{' '}
-          <a href="https://github.com/XyraSinclair/apocalypse-ews">github.com/XyraSinclair/apocalypse-ews</a>.
+          <a href="https://github.com/XyraSinclair/warning-watch">github.com/XyraSinclair/warning-watch</a>.
         </p>
       </div>
     </section>
@@ -1713,7 +1713,7 @@ function SignupPage() {
           </p>
           <p>
             Prefer no personal info at all? Use browser push below, or subscribe to{' '}
-            <code>https://ntfy.warning.watch/apocalypse-ews-alerts</code> in the free ntfy app.
+            <code>https://ntfy.warning.watch/warning-watch-alerts</code> in the free ntfy app.
           </p>
           <p className="hero-link-row"><a href="/aviation">Back to Aviation</a></p>
         </section>
@@ -1746,7 +1746,7 @@ function SignupPage() {
             </label>
             <label className="signup-field checkbox-field">
               <input type="checkbox" name="smsConsent" checked={smsConsent} disabled={!phone.trim()} onChange={(event) => setSmsConsent(event.currentTarget.checked)} />
-              <span>I consent to receive Apocalypse EWS SMS alerts at this number. Message and data rates may apply; reply STOP to opt out.</span>
+              <span>I consent to receive Warning Watch SMS alerts at this number. Message and data rates may apply; reply STOP to opt out.</span>
             </label>
             <button className="signup-submit" type="submit" disabled={submitting}>{submitting ? 'Saving...' : 'Sign Up'}</button>
           </form>

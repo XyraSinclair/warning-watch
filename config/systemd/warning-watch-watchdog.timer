@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Warning Watch operations watchdog every two minutes
+
+[Timer]
+OnCalendar=*-*-* *:00/2:00
+AccuracySec=1s
+Persistent=true
+Unit=warning-watch-watchdog.service
+
+[Install]
+WantedBy=timers.target

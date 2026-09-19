@@ -1,10 +1,10 @@
 [Unit]
-Description=Run Apocalypse EWS history repair every 6 hours
+Description=Run Warning Watch history repair every 6 hours
 
 [Timer]
 OnCalendar=*-*-* 00,06,12,18:50:00
 Persistent=true
-Unit=apocalypse-ews-repair.service
+Unit=warning-watch-repair.service
 
 [Install]
 WantedBy=timers.target

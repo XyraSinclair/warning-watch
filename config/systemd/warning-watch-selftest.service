@@ -1,13 +1,13 @@
 [Unit]
-Description=Apocalypse EWS nightly detector self-test (backtest with asserted bounds)
+Description=Warning Watch nightly detector self-test (backtest with asserted bounds)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
 User=xyra
-WorkingDirectory=/opt/dev/apocalypse-ews
-EnvironmentFile=/etc/apocalypse-ews.env
+WorkingDirectory=/opt/dev/warning-watch
+EnvironmentFile=/etc/warning-watch.env
 Environment=NODE_ENV=production
 ExecStart=/bin/sh -c '/usr/bin/node scripts/backtest_detector.js --db data/ews-main.sqlite --cohort global_business_jet --inject-exodus --assert && /usr/bin/node scripts/backtest_detector.js --db data/ews-military.sqlite --cohort global_military_aircraft --inject-exodus --assert'
 NoNewPrivileges=true

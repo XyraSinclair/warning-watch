@@ -1,15 +1,15 @@
 [Unit]
-Description=Refresh Apocalypse EWS snapshots
+Description=Refresh Warning Watch snapshots
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
 User=xyra
-WorkingDirectory=/opt/dev/apocalypse-ews
-EnvironmentFile=/etc/apocalypse-ews.env
+WorkingDirectory=/opt/dev/warning-watch
+EnvironmentFile=/etc/warning-watch.env
 Environment=NODE_ENV=production
-Environment=PATH=/opt/dev/apocalypse-ews/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PATH=/opt/dev/warning-watch/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/bin/node scripts/refresh_all_snapshots.js
 TimeoutStartSec=310
 TimeoutStopSec=5

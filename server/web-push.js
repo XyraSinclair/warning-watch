@@ -230,10 +230,10 @@ function normalizeUrgency(value) {
 
 function buildWebPushNotificationPayload({ title, body, url, tag, level, eventKey }) {
   return JSON.stringify({
-    title: String(title || 'Apocalypse EWS alert').slice(0, 160),
+    title: String(title || 'Warning Watch alert').slice(0, 160),
     body: String(body || 'A takeoff or anomaly alert was detected.').slice(0, 1200),
     url: String(url || '/'),
-    tag: String(tag || eventKey || 'apocalypse-ews-alert').slice(0, 128),
+    tag: String(tag || eventKey || 'warning-watch-alert').slice(0, 128),
     level: level ?? null,
     eventKey: eventKey || null,
   });

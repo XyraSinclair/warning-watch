@@ -20,7 +20,7 @@ The core product is a current situation picture: source health, newly observed c
 
 The existing operational system can keep running under its present anomaly-reporting limits. This document proposes a new strategy; it does not authorize fresh purchases, change live alerts, or describe capabilities already built.
 
-**Concrete collection register:** [https://github.com/XyraSinclair/apocalypse-ews/blob/main/DIGITAL-SIGNAL-REGISTER.md](https://github.com/XyraSinclair/apocalypse-ews/blob/main/DIGITAL-SIGNAL-REGISTER.md) — 12 watch families, 64 observable changes, 26 source surfaces, access/latency findings, and seven inspected ordinary responses. The 36-item atlas below supplies analytic questions; the register supplies digital instruments.
+**Concrete collection register:** [https://github.com/XyraSinclair/warning-watch/blob/main/DIGITAL-SIGNAL-REGISTER.md](https://github.com/XyraSinclair/warning-watch/blob/main/DIGITAL-SIGNAL-REGISTER.md) — 12 watch families, 64 observable changes, 26 source surfaces, access/latency findings, and seven inspected ordinary responses. The 36-item atlas below supplies analytic questions; the register supplies digital instruments.
 
 **Implementation note:** the initial collection, incident-memory, bounded
 specialist/skeptic/synthesis, handover, and operator-review loops are implemented.

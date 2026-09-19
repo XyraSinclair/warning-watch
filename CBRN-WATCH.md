@@ -142,7 +142,7 @@ raises confidence in the *observation*, not in its cause.
 
 ## 9. Bounds and operations
 
-One systemd timer (`apocalypse-ews-cbrn.timer`, every five minutes) runs
+One systemd timer (`warning-watch-cbrn.timer`, every five minutes) runs
 `scripts/cbrn_refresh.js`: radiation ingest (self-limited to one poll per
 network per 30 minutes), aircraft ingest, then the four detectors and the
 fusion pass. Stages are failure-isolated and reported individually; a missing

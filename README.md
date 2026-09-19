@@ -1,4 +1,4 @@
-# Apocalypse EWS
+# Warning Watch
 
 A continuous public-source watch built to alert people to **CBRN risk** —
 chemical, biological, radiological and nuclear. Its instruments are open gamma
@@ -98,7 +98,7 @@ The supported model is `google/gemini-2.5-flash-lite`, with a $0.10 provider-usa
 allowance per UTC day. Reports enter bounded batch screening before full,
 three-role investigation; official notices bypass that admission stage.
 Missing inference credentials do not stop source collection. Production uses
-the separate `/etc/apocalypse-ews-watch.env`, read only by the watch service.
+the separate `/etc/warning-watch-sources.env`, read only by the watch service.
 
 The registry contains 46 definitions, including ten country-specific travel
 advisories: 28 enabled and 18 explicitly inactive or access-gated. These are

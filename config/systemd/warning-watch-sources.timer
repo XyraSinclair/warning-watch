@@ -5,7 +5,7 @@ Description=Run the public digital watch every minute
 OnCalendar=*-*-* *:*:00
 AccuracySec=1s
 Persistent=true
-Unit=apocalypse-ews-watch.service
+Unit=warning-watch-sources.service
 
 [Install]
 WantedBy=timers.target

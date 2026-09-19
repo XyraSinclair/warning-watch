@@ -29,7 +29,7 @@ function loadEnvFile(filePath) {
   }
 }
 
-loadEnvFile('/etc/apocalypse-ews.env');
+loadEnvFile('/etc/warning-watch.env');
 loadEnvFile(path.join(ROOT_DIR, '.env'));
 
 const topic = String(process.env.EWS_NTFY_OPS_TOPIC || '').trim();
@@ -92,7 +92,7 @@ async function main() {
   if (healthy) {
     if (state.alerting) {
       await publish(
-        'Apocalypse EWS recovered',
+        'Warning Watch recovered',
         'All cohorts are ingesting again and every service is healthy. No action needed.',
         'default'
       );
@@ -115,9 +115,9 @@ async function main() {
     'The plane-flight monitor on xyra-dev-hetzner is unhealthy:',
     ...problems.map((p) => `- ${p}`),
     '',
-    'The 6-hourly repair timer will attempt self-healing; if this repeats, check `journalctl -u apocalypse-ews-refresh` on the box.',
+    'The 6-hourly repair timer will attempt self-healing; if this repeats, check `journalctl -u warning-watch-refresh` on the box.',
   ].join('\n');
-  await publish('Apocalypse EWS unhealthy', body, 'high');
+  await publish('Warning Watch unhealthy', body, 'high');
   writeState({ alerting: true, problemsHash, sentAtMs: Date.now() });
   console.log(JSON.stringify({ ok: true, healthy: false, sent: 'alert', problems }));
   process.exit(1);

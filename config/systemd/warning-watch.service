@@ -1,13 +1,13 @@
 [Unit]
-Description=Apocalypse EWS backend
+Description=Warning Watch backend
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=xyra
-WorkingDirectory=/opt/dev/apocalypse-ews
-EnvironmentFile=/etc/apocalypse-ews.env
+WorkingDirectory=/opt/dev/warning-watch
+EnvironmentFile=/etc/warning-watch.env
 Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=3030

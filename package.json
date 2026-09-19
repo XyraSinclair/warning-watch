@@ -1,9 +1,9 @@
 {
-  "name": "apocalypse-ews",
+  "name": "warning-watch",
   "private": true,
   "version": "0.2.0",
   "type": "commonjs",
-  "description": "Private backend-capable recreation of the Apocalypse Early Warning System.",
+  "description": "Continuous public-source CBRN early-warning watch, live at warning.watch.",
   "scripts": {
     "dev": "concurrently -k -n server,client -c blue,magenta \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "node --watch server/index.js",

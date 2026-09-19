@@ -1,4 +1,4 @@
-# Operations — Apocalypse EWS
+# Operations — Warning Watch
 
 The public surface combines a browser-local household alert plan, a separate
 official-source notice display, and a continuous digital watch of observations,
@@ -10,12 +10,12 @@ warning delivery to a resident.
 
 ## Re-entry protocol (start here after any absence)
 
-The live deployment is on **xyra-dev-hetzner** at `/opt/dev/apocalypse-ews`
+The live deployment is on **xyra-dev-hetzner** at `/opt/dev/warning-watch`
 (a git checkout of this repo's `main`; the laptop checkout is development
 only — its launchd agents were retired 2026-08-27).
 
 ```sh
-ssh xyra-dev-hetzner 'cd /opt/dev/apocalypse-ews && npm run status'
+ssh xyra-dev-hetzner 'cd /opt/dev/warning-watch && npm run status'
 ```
 
 `verdict.healthy` and `problems` retain the existing aviation/infrastructure
@@ -26,11 +26,11 @@ ntfy, email, SMS, or Telegram messages. Aviation history repairs itself within
 6 hours via the repair timer, or force it now:
 
 ```sh
-ssh xyra-dev-hetzner 'systemctl start apocalypse-ews-repair.service'
+ssh xyra-dev-hetzner 'systemctl start warning-watch-repair.service'
 ```
 
 The two-minute watchdog pushes a plain-language note to the private ops ntfy
-topic (`EWS_NTFY_OPS_TOPIC` in `/etc/apocalypse-ews.env`) whenever the
+topic (`EWS_NTFY_OPS_TOPIC` in `/etc/warning-watch.env`) whenever the
 verdict goes unhealthy, and a recovery note when it heals. Its own timer and
 delivery path must also remain healthy; silence alone proves neither.
 
@@ -41,7 +41,7 @@ Continuation work is tracked as beads: `br ready` lists what is unblocked
 
 Systemd units — canonical sources in `config/systemd/` (incl.
 `cloudflared.service`; ntfy config in `config/ntfy-server.yml`), installed to
-`/etc/systemd/system/`. Config in `/etc/apocalypse-ews.env` (not in git).
+`/etc/systemd/system/`. Config in `/etc/warning-watch.env` (not in git).
 **Fresh-box rebuild: `deploy/bootstrap.sh`** (run as root on Ubuntu 24.04;
 idempotent; installs packages/units from the canonical sources and prints
 TODOs for the two secrets it cannot invent — the env file and the tunnel
@@ -49,22 +49,22 @@ token).
 
 | Unit | What | Cadence |
 |---|---|---|
-| `apocalypse-ews.service` | `server/index.js` Express server on 127.0.0.1:3030 | always on |
-| `apocalypse-ews-refresh.timer` | incremental pass (check archive → ingest new slot → snapshots/detection once per sample → retry delivery → feeds) | every 2 min, single active pass |
-| `apocalypse-ews-watch.timer` | `run_watch.js` — collect due sources, preserve revisions, investigate queued changes, write handover | every minute, one leased pass |
-| `apocalypse-ews-cbrn.timer` | `cbrn_refresh.js` — collect the CBRN instruments (gamma telemetry, sampled air traffic), run the four directional detectors and the fusion pass; writes alert events only, never deliveries | every 5 min, one flocked pass |
-| `apocalypse-ews-refresh-imports.timer` | same plus aircraft-metadata reimport | daily 00:29 |
-| `apocalypse-ews-repair.timer` | `repair_history_gaps.js` — self-heals trailing gaps AND interior holes across all three cohorts, bounded to 30 days | every 6 h |
-| `apocalypse-ews-watchdog.timer` | `ops_alert.js` — status verdict → ops ntfy topic (deduped, 6 h re-alert, recovery note) | every 2 min |
-| `apocalypse-ews-backup.timer` | `backup_databases.js` — `VACUUM INTO data/backups/<day>/` for all five DBs (three aviation cohorts, `ews-watch.sqlite`, `ews-cbrn.sqlite`), integrity-checked, 14 days kept; staleness feeds the existing status verdict. Restore requires stopping all relevant writers first. Off-box: manual sha256-verified copies land at `xyra-sanctuary:/srv/sanctuary/backups/apocalypse-ews/<day>/` (automation pending a box→sanctuary credential) | daily 02:10 |
-| `cloudflared.service` | Cloudflare tunnel `apocalypse-ews` (id `d27a04ac-5b8a-4d84-a4c9-ccf61978694d`) — serves <https://warning.watch> from loopback:3030 and <https://ntfy.warning.watch> from loopback:2586 with no open inbound ports. Installed via `cloudflared service install <token>`; ingress config lives in the CF dashboard/API (`config_src: cloudflare`), not on disk | always on |
+| `warning-watch.service` | `server/index.js` Express server on 127.0.0.1:3030 | always on |
+| `warning-watch-refresh.timer` | incremental pass (check archive → ingest new slot → snapshots/detection once per sample → retry delivery → feeds) | every 2 min, single active pass |
+| `warning-watch-sources.timer` | `run_watch.js` — collect due sources, preserve revisions, investigate queued changes, write handover | every minute, one leased pass |
+| `warning-watch-cbrn.timer` | `cbrn_refresh.js` — collect the CBRN instruments (gamma telemetry, sampled air traffic), run the four directional detectors and the fusion pass; writes alert events only, never deliveries | every 5 min, one flocked pass |
+| `warning-watch-refresh-imports.timer` | same plus aircraft-metadata reimport | daily 00:29 |
+| `warning-watch-repair.timer` | `repair_history_gaps.js` — self-heals trailing gaps AND interior holes across all three cohorts, bounded to 30 days | every 6 h |
+| `warning-watch-watchdog.timer` | `ops_alert.js` — status verdict → ops ntfy topic (deduped, 6 h re-alert, recovery note) | every 2 min |
+| `warning-watch-backup.timer` | `backup_databases.js` — `VACUUM INTO data/backups/<day>/` for all five DBs (three aviation cohorts, `ews-watch.sqlite`, `ews-cbrn.sqlite`), integrity-checked, 14 days kept; staleness feeds the existing status verdict. Restore requires stopping all relevant writers first. Off-box: manual sha256-verified copies land at `xyra-sanctuary:/srv/sanctuary/backups/warning-watch/<day>/` (automation pending a box→sanctuary credential) | daily 02:10 |
+| `cloudflared.service` | Cloudflare tunnel `warning-watch` (id `d27a04ac-5b8a-4d84-a4c9-ccf61978694d`) — serves <https://warning.watch> from loopback:3030 and <https://ntfy.warning.watch> from loopback:2586 with no open inbound ports. Installed via `cloudflared service install <token>`; ingress config lives in the CF dashboard/API (`config_src: cloudflare`), not on disk | always on |
 | `ntfy.service` | self-hosted ntfy 2.27.0 (`/etc/ntfy/server.yml`): loopback:2586, `auth-default-access: read-only`, user `publisher` has rw on both topics, `upstream-base-url: ntfy.sh` for iOS instant delivery. Auth DB `/var/lib/ntfy/user.db`. Box-side publishers use `EWS_NTFY_SERVER=http://127.0.0.1:2586` (loopback survives a tunnel outage; subscribers reconnect and receive cached messages) | always on |
-| `apocalypse-ews-canary.timer` | `canary_delivery.js` — synthetic end-to-end proof through the **public** path: site health, RSS, and an ops-topic ntfy publish polled back as a subscriber would. Deliberately the opposite path from the watchdog (loopback), so each pages when the other's path dies. Failure leaves the unit `failed`, which the status verdict flags | weekly Mon 17:00 UTC |
+| `warning-watch-canary.timer` | `canary_delivery.js` — synthetic end-to-end proof through the **public** path: site health, RSS, and an ops-topic ntfy publish polled back as a subscriber would. Deliberately the opposite path from the watchdog (loopback), so each pages when the other's path dies. Failure leaves the unit `failed`, which the status verdict flags | weekly Mon 17:00 UTC |
 
 **Public site: <https://warning.watch>** (apoc.watch and earlywarning.watch
 301-redirect there). All three domains are on Xyra's Porkbun account with
 nameservers at Cloudflare (zones on the Xyrasinclair@gmail.com account);
-`EWS_PUBLIC_URL=https://warning.watch` in `/etc/apocalypse-ews.env` makes
+`EWS_PUBLIC_URL=https://warning.watch` in `/etc/warning-watch.env` makes
 confirmation and management links absolute.
 
 The public surface is **one page** at <https://warning.watch/>: current
@@ -85,12 +85,12 @@ xyra-dev-hetzner`):
 - **RSS feed**: <https://warning.watch/rss.xml> — fires on emergency-level changes and alert events
 - Ops/event feeds: `data/published/operations.json`, `event-signals.json`
 
-Logs: `journalctl -u apocalypse-ews-refresh` (and the other unit names).
+Logs: `journalctl -u warning-watch-refresh` (and the other unit names).
 
 Deploying a change: commit and push to `main`, then
 
 ```sh
-ssh xyra-dev-hetzner 'cd /opt/dev/apocalypse-ews && sudo -H -u xyra git pull --ff-only && sudo -H -u xyra npm ci --include=dev && sudo -H -u xyra npm run build && systemctl restart apocalypse-ews.service'
+ssh xyra-dev-hetzner 'cd /opt/dev/warning-watch && sudo -H -u xyra git pull --ff-only && sudo -H -u xyra npm ci --include=dev && sudo -H -u xyra npm run build && systemctl restart warning-watch.service'
 # unit-file changes additionally need:
 #   cp config/systemd/* /etc/systemd/system/ && systemctl daemon-reload
 ```
@@ -159,7 +159,7 @@ offer the schema control. Invalid output fails visibly, never becomes a finding.
 Returned partial usage is retained. Completed assessments update work priority;
 machine-background/routine/correction outcomes close work, not the world.
 
-Keep `SCRY_API_KEY` in root-owned mode-0600 `/etc/apocalypse-ews-watch.env`;
+Keep `SCRY_API_KEY` in root-owned mode-0600 `/etc/warning-watch-sources.env`;
 systemd reads it before dropping privileges to `xyra`. Do not copy it into the
 web-server environment, repository, browser, or logs. `EWS_WATCH_DAILY_BUDGET_USD`
 can lower the $0.10 daily ceiling. This covers the fixed model's provider usage,
@@ -205,7 +205,7 @@ The CBRN instruments are a separate, deterministic layer: no model sits between 
 measurement and the alert. Alarm rules and every threshold are in
 [CBRN-WATCH.md](CBRN-WATCH.md); this section is the operational contract.
 
-`apocalypse-ews-cbrn.timer` runs `scripts/cbrn_refresh.js` every five minutes.
+`warning-watch-cbrn.timer` runs `scripts/cbrn_refresh.js` every five minutes.
 One pass: ingests gamma telemetry (self-limited to one poll per network per 30
 minutes), ingests the live aircraft sample, then runs the radiation, airspace,
 notice and vocabulary detectors and the cross-family fusion pass. Stages are
@@ -821,8 +821,8 @@ The reference standards above remain a control map, not a certification claim.
 |---|---|---|
 | RSS | **live on the box** | nothing |
 | Web dashboard | **live publicly at <https://warning.watch>** (Cloudflare tunnel; box keeps zero open inbound ports) | nothing |
-| **ntfy public push** | **live, self-hosted with write auth** — subscribe to `https://ntfy.warning.watch/apocalypse-ews-alerts` in the ntfy app. Anonymous read, writes require the publisher token (`EWS_NTFY_TOKEN`), so the old ntfy.sh public-write spoof vector is closed. Publishes elevated+ only (`scripts/publish_ntfy_alert.js`) | nothing |
-| **ntfy ops watchdog** | **live, self-hosted** — subscribe to `https://ntfy.warning.watch/apocalypse-ews-ops`; unhealthy verdicts and recoveries only | nothing |
+| **ntfy public push** | **live, self-hosted with write auth** — subscribe to `https://ntfy.warning.watch/warning-watch-alerts` in the ntfy app. Anonymous read, writes require the publisher token (`EWS_NTFY_TOKEN`), so the old ntfy.sh public-write spoof vector is closed. Publishes elevated+ only (`scripts/publish_ntfy_alert.js`) | nothing |
+| **ntfy ops watchdog** | **live, self-hosted** — subscribe to `https://ntfy.warning.watch/warning-watch-ops`; unhealthy verdicts and recoveries only | nothing |
 | Owner push (xmsg → iMessage/email/desktop by severity) | retired with the laptop deployment (xmsg is Mac-only; `notify_local_push.js` silently no-ops on the box) | a box-reachable owner channel, if ever wanted |
 | Telegram channel | token wired (@XyraClawdBot, reused from xyra_claw — sends don't conflict with its polling) | one 45-second phone step: create channel, add bot as admin, set `TELEGRAM_CHANNEL` in `.env` |
 | Email (SendGrid) | code ready, **double opt-in enforced** (signup sends a confirm link; only confirmed addresses are ever alerted; without `SENDGRID_API_KEY` the confirm path is logged to the journal instead) | production deploy (below) |
@@ -835,8 +835,8 @@ The reference standards above remain a control map, not a certification claim.
 Everything generable is already configured on the box (VAPID keypair,
 `INTERNAL_ALERT_TOKEN`, `NOTIFICATION_HASH_SECRET`,
 `NOTIFICATION_ENCRYPTION_KEY`, `EWS_PUBLIC_URL=https://warning.watch`).
-The irreducible credentials — add to `/etc/apocalypse-ews.env` when the
-provider accounts exist, then `systemctl restart apocalypse-ews.service`:
+The irreducible credentials — add to `/etc/warning-watch.env` when the
+provider accounts exist, then `systemctl restart warning-watch.service`:
 
 1. `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL` (email; `SENDGRID_WEBHOOK_PUBLIC_KEY`
    for delivery-status callbacks)
@@ -875,7 +875,7 @@ the upstream reference site.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `npm run status` → history stale | box outage or upstream feed break | `systemctl start apocalypse-ews-repair.service` (or wait ≤6 h for the timer); if refresh itself is failing, `journalctl -u apocalypse-ews-refresh` |
+| `npm run status` → history stale | box outage or upstream feed break | `systemctl start warning-watch-repair.service` (or wait ≤6 h for the timer); if refresh itself is failing, `journalctl -u warning-watch-refresh` |
 | heatmap downloads return 403 | ADSBx CDN rejects requests without a globe `Referer` (enforced ~2026-07/08) | all fetch sites send `scripts/adsbx_http.py` `GLOBE_HEADERS`; if 403 returns with those headers, the fronting changed again — re-probe with browser headers |
 | `import_global_cohort` JSON errors | upstream basic-ac-db ships occasional malformed JSONL lines | tolerated (skipped + counted) up to 0.5% of lines; above that the feed itself changed — inspect a fresh download |
 | refresh exits 1 with `failedStages` | one alert channel or feed export failed | other stages already ran; the failed channel's cursor holds and retries next pass — fix the named stage |

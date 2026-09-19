@@ -1,13 +1,13 @@
 [Unit]
-Description=Apocalypse EWS operations watchdog
+Description=Warning Watch operations watchdog
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
 User=xyra
-WorkingDirectory=/opt/dev/apocalypse-ews
-EnvironmentFile=/etc/apocalypse-ews.env
+WorkingDirectory=/opt/dev/warning-watch
+EnvironmentFile=/etc/warning-watch.env
 Environment=NODE_ENV=production
 ExecStart=/usr/bin/node scripts/ops_alert.js
 NoNewPrivileges=true

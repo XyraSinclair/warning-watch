@@ -1,11 +1,11 @@
 [Unit]
-Description=Poll Apocalypse EWS archive availability every two minutes
+Description=Poll Warning Watch archive availability every two minutes
 
 [Timer]
 OnCalendar=*-*-* *:00/2:00
 AccuracySec=1s
 Persistent=true
-Unit=apocalypse-ews-refresh.service
+Unit=warning-watch-refresh.service
 
 [Install]
 WantedBy=timers.target

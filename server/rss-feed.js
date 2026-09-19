@@ -148,9 +148,9 @@ function buildEmergencyRssFeedXml({ items = getRssItems(), env = process.env } =
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Apocalypse Early Warning System</title>
+    <title>warning.watch</title>
     <link>${escapeXml(config.siteUrl)}</link>
-    <description>Emergency level 5 alerts from the Apocalypse Early Warning System.</description>
+    <description>CBRN alerts from warning.watch, published at elevated severity and above.</description>
     <language>en-us</language>
     <lastBuildDate>${escapeXml(lastBuildDate)}</lastBuildDate>
     <ttl>30</ttl>

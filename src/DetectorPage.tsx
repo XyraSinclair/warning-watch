@@ -245,8 +245,9 @@ export default function DetectorPage() {
       <section>
         <h2>Subscribe</h2>
         <p>
-          Push: <code>ntfy</code> topic <code id="topic">warning.watch</code>. Feed: <a href="/rss.xml">/rss.xml</a>.
-          Alerts publish at elevated and above through the same fan-out to email, SMS and web push for subscribers.
+          Push: in the <a href="https://ntfy.sh/">ntfy</a> app, subscribe to{' '}
+          <code id="topic">https://ntfy.warning.watch/warning-watch-alerts</code>. Feed:{' '}
+          <a href="/rss.xml">/rss.xml</a>. Alerts publish to both at elevated and above.
         </p>
       </section>
     </main>

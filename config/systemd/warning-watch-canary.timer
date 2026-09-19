@@ -1,5 +1,5 @@
 [Unit]
-Description=Weekly Apocalypse EWS delivery canary
+Description=Weekly Warning Watch delivery canary
 
 [Timer]
 OnCalendar=Mon *-*-* 17:00:00

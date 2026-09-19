@@ -16,7 +16,7 @@ function loadEnvFile(filePath) {
   }
 }
 
-loadEnvFile('/etc/apocalypse-ews.env');
+loadEnvFile('/etc/warning-watch.env');
 loadEnvFile(path.join(__dirname, '..', '.env'));
 
 function parseArgs(argv) {
