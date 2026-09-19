@@ -37,6 +37,7 @@ healthy; ntfy round-trip canary passing.
 | A8 | Alert copy leaks internal identifiers | `global_military_aircraft` in public text | open |
 | A9 | Fresh-box bootstrap never enabled the CBRN or self-test timers | `deploy/bootstrap.sh` timer list | fixed 19 Sept |
 | A10 | README station count unexplained | README: 17,384 EURDEP stations; live: 3,658 reporting | open |
+| A11 | Public dashboard JSON exposed server filesystem paths | `page.dbPath` and `liveStatus.cachePath` in `/dashboard.json`, both sibling files and `/api/dashboard`; a 503 message named the snapshot path | fixed 19 Sept |
 
 ### The climb, in order
 

@@ -2118,8 +2118,10 @@ function buildDashboardPayload({
     warning: tracking.configured ? null : tracking.reason,
     cohort: tracking,
     watchlist: tracking,
+    // The payload is public: the cache path is a server filesystem location.
     liveStatus: {
       ...liveStatus,
+      cachePath: undefined,
       concurrentCount,
     },
     current: {

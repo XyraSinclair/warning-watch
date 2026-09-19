@@ -75,7 +75,6 @@ function main() {
     page: {
       enabled: true,
       endpoint: args.endpoint,
-      dbPath: DB_PATH,
       cohort: args.cohort,
       predictionModel: concurrentPredictionOptions.concurrentPredictionModel,
       predictionTimeZone: concurrentPredictionOptions.weeklyBaselineTimeZone,

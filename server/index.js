@@ -559,7 +559,7 @@ for (const [routePath, fileName] of PUBLISHED_DASHBOARD_FILES) {
     const snapshotPath = path.join(PUBLISHED_DIR, fileName);
     if (!fs.existsSync(snapshotPath)) {
       response.status(503).json({
-        error: `Published dashboard snapshot is not available at ${snapshotPath}.`,
+        error: `Published dashboard snapshot  is not available.`,
       });
       return;
     }
