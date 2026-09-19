@@ -56,7 +56,7 @@ CBRN instruments ──► deterministic detectors ──► alert_events ──
 
 | Instrument | Measurement | Coverage | Cadence |
 |---|---|---|---|
-| Radiological telemetry | Gamma dose rate per station | 1,676 German probes + a live EURDEP mirror of 17,384 stations in 44 countries (BfS/IMIS OGC service) | hourly |
+| Radiological telemetry | Gamma dose rate per station | 1,676 German probes + a live EURDEP mirror of 17,384 stations in 44 countries (BfS/IMIS OGC service); EPA RadNet's 140 US monitors | hourly |
 | Civil air traffic | Aircraft counts, emergency indications, special-mission type presence | 14 public CBRN-relevant geographies + 2 health controls | 5 min |
 | Public vocabulary | CBRN event-word counts by place | one public post stream + one news index | hourly |
 | Official notices | CBRN alerts and instructions | NWS CAP, NRC events and reactor status, FAA TFRs, WHO, ECDC, IAEA, HealthMap | 10 min – 1 h |
