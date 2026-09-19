@@ -128,8 +128,10 @@ against the catalogue since 2000 on 19 Sept 2026:
   six North Korean tests.
 - **M ≥ 3.5 within a test-site geofence** (50 km; 60 km at Nevada): `high` if
   the depth is within 5 km of the surface or the type is `explosion`;
-  `elevated` if USGS has not yet constrained the depth (its 10 km placeholder);
-  `watch` if the depth is well determined and deep. In 26.7 years this is one
+  if USGS has not yet constrained the depth (its 10 km placeholder), `high` at
+  the three seismically quiet sites (Punggye-ri, Novaya Zemlya, Pokhran: no
+  independent natural M ≥ 3.5 since 2000) and `elevated` at the four active
+  ones; `watch` if the depth is determined and deeper than 5 km. In 26.7 years this is one
   `high` that was not a test (the M3.6 aftershock the 2017 test induced) and
   eight `elevated`, about one every three years, all placeholder-depth
   earthquakes near Lop Nur, Ras Koh and Kharan. A depth revision raises or

@@ -8,8 +8,10 @@
 // of M>=3.5, about one a year; one of them is shallower than 5 km, and that one
 // was induced by the 2017 test. Worldwide, no event of M>=4 was typed
 // `explosion` in the year to 19 Sept 2026. So: location plus shallowness is a
-// near-zero false-alarm surface, location alone is about one a year, and the
-// agency's own classification is decisive wherever it happens.
+// near-zero false-alarm surface, location alone is about one a year (all of it
+// at the four seismically active sites; the three `quiet` ones have no natural
+// background at all), and the agency's own classification is decisive wherever
+// it happens.
 //
 // What this cannot see: an atmospheric or high-altitude burst, a test too
 // small or too remote for the global network, and, until USGS classifies it,
@@ -57,7 +59,9 @@ function assessSeismicEvent({ classification, magnitude, lat, lon, depthKm }) {
   if (near && magnitude >= SITE_MIN_MAGNITUDE) {
     const unconstrained = !Number.isFinite(depthKm) || depthKm === UNCONSTRAINED_DEPTH_KM;
     const shallow = Number.isFinite(depthKm) && depthKm <= SHALLOW_KM;
-    const level = classification === 'explosion' || shallow ? 4 : unconstrained ? 3 : 1;
+    // At a seismically quiet site an undetermined depth is already alarming:
+    // there is no natural background there for it to belong to.
+    const level = classification === 'explosion' || shallow ? 4 : unconstrained ? (near.site.quiet ? 4 : 3) : 1;
     return { level, rule: 'test_site_geofence', site: near.site, distanceKm: near.distanceKm, depth: shallow ? 'shallow' : unconstrained ? 'unconstrained' : 'deep' };
   }
   if (classification === 'explosion' && magnitude >= EXPLOSION_MIN_MAGNITUDE) {

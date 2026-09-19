@@ -102,19 +102,21 @@ function detect(watch, settings, now = Date.now()) {
         let title;
         let message;
         if (verdict.rule === 'agency_classified_nuclear') {
-          title = `USGS classifies a ${magnitude} seismic event as a nuclear explosion${verdict.site ? `, ${where}` : ''}`;
-          message = `USGS catalogued a ${magnitude} event at ${at}, ${d.place || 'place not supplied'}, depth ${depthText}, classification "nuclear explosion", review status ${d.reviewStatus || 'not supplied'}. The agency's own classification is the strongest open-source seismic evidence there is. ${limits}`;
+          title = `USGS classifies an ${magnitude} seismic event as a nuclear explosion${verdict.site ? `, ${where}` : ''}`;
+          message = `USGS catalogued an ${magnitude} event at ${at}, ${d.place || 'place not supplied'}, depth ${depthText}, classification "nuclear explosion", review status ${d.reviewStatus || 'not supplied'}. The agency's own classification is the strongest open-source seismic evidence there is. ${limits}`;
         } else if (verdict.rule === 'agency_classified_explosion') {
-          title = `USGS classifies a ${magnitude} seismic event as an explosion: ${d.place || 'place not supplied'}`;
-          message = `USGS catalogued a ${magnitude} event at ${at}, ${d.place || 'place not supplied'}, as an explosion, not an earthquake, away from any known nuclear test site. Explosions this large are rare: none of M4 or more was catalogued worldwide in the year to September 2026. ${limits}`;
+          title = `USGS classifies an ${magnitude} seismic event as an explosion: ${d.place || 'place not supplied'}`;
+          message = `USGS catalogued an ${magnitude} event at ${at}, ${d.place || 'place not supplied'}, as an explosion, not an earthquake, away from any known nuclear test site. Explosions this large are rare: none of M4 or more was catalogued worldwide in the year to September 2026. ${limits}`;
         } else {
           const depthClause = verdict.depth === 'shallow'
             ? `depth ${depthText}, within ${SHALLOW_KM} km of the surface as every catalogued nuclear test has been. Since 2000 one natural earthquake of this size has been catalogued this shallow within 50 km of any known test site, and it was induced by the 2017 test.`
             : verdict.depth === 'unconstrained'
-              ? `depth not yet determined (USGS placeholder ${depthText}). Natural earthquakes of this size occur within 50 km of a known test site about once a year; a determined depth will raise or clear this.`
-              : `depth ${depthText}, well below any test depth, so most likely a natural earthquake.`;
+              ? (verdict.site.quiet
+                ? `depth not yet determined (USGS placeholder ${depthText}). This site is seismically quiet: since 2000 USGS has catalogued no independent natural earthquake of this size within 50 km of it.`
+                : `depth not yet determined (USGS placeholder ${depthText}). This site is seismically active: natural earthquakes of this size occur within 50 km of it and the other active test sites about once a year. A determined depth will raise or clear this.`)
+              : `depth ${depthText}, determined from the data and deeper than the ${SHALLOW_KM} km every catalogued test has been within, so most likely a natural earthquake.`;
           title = verdict.depth === 'shallow' ? `Shallow ${magnitude} seismic event ${where}` : `${magnitude} seismic event ${where}`;
-          message = `USGS located a ${magnitude} event at ${at}, ${where}, ${depthClause} USGS classification: ${d.classification}; review status ${d.reviewStatus || 'not supplied'}. ${limits}`;
+          message = `USGS located an ${magnitude} event at ${at}, ${where}, ${depthClause} USGS classification: ${d.classification}; review status ${d.reviewStatus || 'not supplied'}. ${limits}`;
         }
         emit(row, o, verdict.level, title, message, { rule: verdict.rule, magnitude: d.magnitude, depth_km: Number.isFinite(depthKm) ? depthKm : null, depth: verdict.depth, classification: d.classification, review_status: d.reviewStatus ?? null, site: verdict.site?.id ?? null, distance_km: verdict.distanceKm == null ? null : +verdict.distanceKm.toFixed(1) }, [row.external_id], { kind: KIND.SEISMIC_EVENT, keySource: 'usgs', occurredAt: new Date(occurredMs).toISOString() });
       } else if (source === 'who-outbreaks' || source === 'ecdc-threats') {
