@@ -185,10 +185,13 @@ export default function DetectorPage() {
           <dd>
             6 departures within 60 km of each other inside 60 minutes, against the same hour on the previous 21 days.
           </dd>
-          <dt>Turnaround volume</dt>
+          <dt>Takeoff volume</dt>
           <dd>
-            Takeoff rate scored against a seasonal baseline of the same weekday class and half-hour slot, with a
-            sustained-shift accumulator. A 3× exodus reaches high within an hour and critical within two.
+            Business-jet takeoffs per half-hour, scored as a count against the same weekday class and half-hour over
+            28 days. Elevated needs three times the expected count and a count that chance alone produces in fewer
+            than 1 half-hour in 1,460 — twelve a year. High is 1 in 4,380; critical, 1 in 17,520. A slower exodus is
+            carried by a sustained-shift accumulator on the number airborne: 3× reaches high within an hour and
+            critical within two.
           </dd>
           <dt>Notices</dt>
           <dd>

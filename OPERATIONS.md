@@ -530,10 +530,26 @@ assurance work; this checklist does not certify them.
   let the live exodus being scored (present in its own baseline group) drag
   the mean and explode the sigma — a 3× injection scored σ2.4 under
   mean/stdDev vs σ27.9 under median/MAD.
-- Takeoff-rate anomaly (`takeoff-rate-seasonal-robust`): live-process window
-  count vs a (weekday/weekend × slot-of-day) median/MAD baseline over
-  `EWS_TAKEOFF_RATE_LOOKBACK_DAYS` (28), z ≥ 3.5 → elevated, ≥ 4.5 high,
-  ≥ 6 critical. **Both numerator and baseline count only
+- Takeoff-rate anomaly (`takeoff-rate-seasonal-negbin`, 2026-09-19): the
+  live-process window count is scored **as a count**. Expected rate = clipped
+  mean of the (weekday/weekend × slot-of-day) group over
+  `EWS_TAKEOFF_RATE_LOOKBACK_DAYS` (28); dispersion = Pearson chi-square pooled
+  over every group in the lookback, floored at 1; score = **surprise** =
+  −log10 P(X ≥ count) under that negative binomial. Thresholds are the alert
+  budget turned into a probability — 12 / 4 / 1 public alerts a year =
+  surprise ≥ 3.16 / 3.64 / 4.24 — and the public tiers also need the magnitude
+  gate, count ≥ 3× expected. Surprise ≥ `EWS_TAKEOFF_RATE_SURPRISE` (2) is
+  recorded as an operator-surface `watch` event. Every ready slot's surprise
+  goes to `slot_scores`; once that record holds 1,460 slots it acts as a
+  second guard that can only raise a threshold (strictly exceed the k-th
+  largest, k = floor(budget × n / 17,520), lift capped at 2 decades so day one
+  of a real event cannot mute day two). Backfill the record with
+  `backtest_detector.js --write-scores --takeoff-days 120`. Why counts: the
+  previous median/MAD z-score read "5 takeoffs vs 0.8 expected" as 4.2σ and
+  produced 25 of the 28 public alerts raised between 14 July and 16 Sept;
+  on the same record the negative-binomial tail is calibrated (nominal
+  0.1 / 0.01 / 0.001 → observed 0.088 / 0.0088 / 0.0008) and raises none.
+  **Both numerator and baseline count only
   `source='adsbx_heatmap'` events** — trace-backfilled events (`adsbx_history`,
   ~45× denser, written by repair with sub-slot timestamps) are a different
   counting process and are excluded, so a repair pass touching the current
@@ -585,7 +601,8 @@ loudly.
 | 3× exodus → HIGH | ≤ 60 min | the reason the system exists; replayed nightly by injection | `backtest --assert` (selftest timer, 03:40 UTC) |
 | 3× exodus → CRITICAL | ≤ 120 min | one 3× slot reads ~9–10σ while the self-calibrated alarm line sits at ~11σ (2nd-hottest real day — Dec 27 holiday wave hit 11.1σ with no apocalypse); sustain is what separates an exodus from a holiday wave, and CUSUM accumulates it past critical inside two hours (recalibrated 2026-08-30 on the full 365-day history) | `backtest --assert` |
 | Takeoff false criticals | 0 in replay | critical is a paging severity; history contains no exodus | `backtest --assert` |
-| Takeoff fires (all tiers) | ≤ 0.2/day | watch-tier noise budget | `backtest --assert` |
+| Takeoff public alerts | ≤ 12/yr (+2 slack per replay) | the stated alert budget; counted at elevated and above, the tiers a subscriber receives | `backtest --assert` |
+| Takeoff score calibration | 1-in-100 scores in ≤ 2 % of slots | the thresholds are tail probabilities; if the tail stops being honest the thresholds stop meaning what the page says | `backtest --assert` |
 | CUSUM crossings | ≤ 1.5/30 d (critical ≤ 0.5/30 d) | sustained-shift pages must stay rare on real history | `backtest --assert` |
 | Concurrent level-5 days | ≤ 1/30 d (level ≥ 4 ≤ 2/30 d) | threshold self-calibrates to 2nd-highest daily peak ⇒ ~1 alarm/yr as history deepens | `backtest --assert` |
 | Detector warm | ≥ 336 scoreable slots | below a week of live baseline the takeoff channel cannot score | `backtest --assert` |
@@ -867,7 +884,7 @@ the upstream reference site.
   `ntfy_last_alert_id` (public ntfy topic, elevated+). Cursors advance past
   skipped events; a failed send halts cursor advance so the event retries.
 - Severity ladder: watch < elevated < high < critical (see
-  `severityForLevel` / `takeoffSeverityForZScore` in detect_alert_events.js).
+  `severityForLevel` / `takeoffSeverity` in detect_alert_events.js).
 - Python does ingestion/backfill (`update_latest_heatmap.py`,
   `backfill_history.py`, `track_non_icao_hex.py`); Node does everything else.
 

@@ -312,7 +312,7 @@ async function assertTakeoffRateDetection() {
     '336',
     '--takeoff-rate-min-days',
     '7',
-    '--takeoff-rate-z-score',
+    '--takeoff-rate-surprise',
     '3',
   ]);
   const output = JSON.parse(run.stdout.trim());
@@ -321,7 +321,7 @@ async function assertTakeoffRateDetection() {
   assert(output.takeoffRateSampleDayCount >= 7, 'Takeoff-rate detector did not require distinct-day history.');
   assert(output.takeoffRateRequiredSampleCount >= 336, 'Takeoff-rate detector advertised too few required samples.');
   assert(output.takeoffRateRequiredDayCount >= 7, 'Takeoff-rate detector advertised too few required days.');
-  assert(output.takeoffRateZScore >= 3, 'Takeoff-rate detector did not compute an anomalous z-score.');
+  assert(output.takeoffSurprise >= 3, 'Takeoff-rate detector did not score the burst as a 1-in-1,000 slot or rarer.');
   const alerts = db.prepare('SELECT kind, status, payload_json AS payloadJson FROM alert_events ORDER BY kind ASC').all();
   const kinds = alerts.map((event) => event.kind);
   const batchAlert = alerts.find((event) => event.kind === 'takeoff_batch');
@@ -449,7 +449,7 @@ async function assertAlertEventDetectionPreservesDispatchState() {
     '336',
     '--takeoff-rate-min-days',
     '7',
-    '--takeoff-rate-z-score',
+    '--takeoff-rate-surprise',
     '3',
   ]);
   const alert = db.prepare('SELECT status, title, payload_json AS payloadJson, bridged_at AS bridgedAt FROM alert_events WHERE event_key = ?').get(eventKey);

@@ -22,6 +22,9 @@
 // Usage:
 //   node scripts/backtest_detector.js --db data/ews-main.sqlite --cohort global_business_jet
 //     [--takeoff-days 30] [--inject-exodus] [--inject-factor 3]
+//     [--write-scores]   record every replayed slot's score in slot_scores
+//                        (walk-forward, so each score is what live detection
+//                        would have computed at that moment)
 
 const path = require('node:path');
 const Database = require('better-sqlite3');
@@ -31,7 +34,13 @@ const {
   loadTakeoffSlots,
   buildDataQuality,
   getTakeoffWindow,
-  takeoffSeverityForZScore,
+  takeoffSurprise,
+  takeoffSeverity,
+  takeoffModelThresholds,
+  ensureSlotScores,
+  recordSlotScore,
+  TAKEOFF_ALERT_BUDGET_PER_YEAR,
+  TAKEOFF_EXODUS_RATIO,
   cusumStep,
   isUnlearnedHolidayWindow,
 } = require('./detect_alert_events');
@@ -51,7 +60,8 @@ function parseArgs(argv) {
     takeoffWindowMinutes: Number(process.env.EWS_TAKEOFF_WINDOW_MINUTES || 30),
     takeoffRateLookbackDays: Number(process.env.EWS_TAKEOFF_RATE_LOOKBACK_DAYS || 28),
     takeoffRateMinCount: Number(process.env.EWS_TAKEOFF_RATE_MIN_COUNT || 3),
-    takeoffRateZScore: Number(process.env.EWS_TAKEOFF_RATE_Z_SCORE || 3.5),
+    takeoffRateSurprise: Number(process.env.EWS_TAKEOFF_RATE_SURPRISE || 2),
+    writeScores: false,
     takeoffLiveSource: process.env.EWS_TAKEOFF_LIVE_SOURCE || 'adsbx_heatmap',
     dataQualityMinRatio: Number(process.env.EWS_DATA_QUALITY_MIN_RATIO || 0.6),
     cusumK: Number(process.env.EWS_CUSUM_K || 1.5),
@@ -63,6 +73,7 @@ function parseArgs(argv) {
     if (value === '--db') args.db = argv[++index];
     else if (value === '--cohort') args.cohort = argv[++index];
     else if (value === '--takeoff-days') args.takeoffDays = Number(argv[++index]);
+    else if (value === '--write-scores') args.writeScores = true;
     else if (value === '--inject-exodus') args.injectExodus = true;
     else if (value === '--inject-factor') args.injectFactor = Number(argv[++index]);
     else if (value === '--assert') args.assert = true;
@@ -196,8 +207,13 @@ function takeoffReplay(db, args) {
   };
   const dataQualityFrequency = {};
   const slots = rows.filter((row) => row.sampledAtMs >= replayStartMs);
+  // Replay judges the model thresholds alone: the record guard can only raise
+  // a threshold, so this is the upper bound on what the live detector raises.
+  const ladder = { model: takeoffModelThresholds(), record: null };
   const fired = [];
-  const zValues = [];
+  const candidates = [];
+  const surprises = [];
+  const scored = [];
   let readySlots = 0;
   let lowerIndex = 0;
   let upperIndex = 0;
@@ -223,31 +239,53 @@ function takeoffReplay(db, args) {
     // Live-process events sit exactly on slot timestamps, so the window
     // count ending at this slot is the slot's own live count.
     const count = Number(slot.takeoffCount || 0);
-    const z = (count - stats.expectedTakeoffCount) / stats.effectiveTakeoffStdDev;
-    zValues.push(z);
-    if (count >= args.takeoffRateMinCount && z >= args.takeoffRateZScore) {
-      fired.push({
-        sampledAt: slot.sampledAt,
-        count,
-        expected: +stats.expectedTakeoffCount.toFixed(1),
-        sigma: +stats.effectiveTakeoffStdDev.toFixed(1),
-        z: +z.toFixed(2),
-        severity: takeoffSeverityForZScore(z),
-        tier: stats.baselineTier,
-      });
+    const surprise = takeoffSurprise(count, stats);
+    surprises.push(surprise);
+    scored.push({ sampledAt: slot.sampledAt, surprise, count });
+    if (surprise < args.takeoffRateSurprise) {
+      continue;
+    }
+    // Same two gates as live detection.
+    const magnitude = count >= Math.max(args.takeoffRateMinCount, TAKEOFF_EXODUS_RATIO * stats.expectedTakeoffCount);
+    const event = {
+      sampledAt: slot.sampledAt,
+      count,
+      expected: +stats.expectedTakeoffCount.toFixed(1),
+      dispersion: +stats.takeoffDispersion.toFixed(2),
+      surprise: +surprise.toFixed(2),
+      severity: magnitude ? takeoffSeverity(surprise, ladder) : 'watch',
+      tier: stats.baselineTier,
+    };
+    candidates.push(event);
+    if (event.severity !== 'watch') {
+      fired.push(event);
     }
   }
-  zValues.sort((left, right) => left - right);
-  const quantileOf = (fraction) => (zValues.length ? +zValues[Math.min(zValues.length - 1, Math.floor(fraction * zValues.length))].toFixed(2) : null);
+  if (args.writeScores) {
+    ensureSlotScores(db);
+    db.transaction(() => {
+      for (const row of scored) recordSlotScore(db, args.cohort, row.sampledAt, row.surprise, row.count);
+    })();
+  }
+  surprises.sort((left, right) => left - right);
+  const quantileOf = (fraction) => (surprises.length ? +surprises[Math.min(surprises.length - 1, Math.floor(fraction * surprises.length))].toFixed(2) : null);
+  // The thresholds are only as good as the tail probability behind them:
+  // a 1-in-100 score must occur in about 1 slot in 100.
+  const observedAt = (decades) => (surprises.length ? surprises.filter((value) => value >= decades).length / surprises.length : 0);
   return {
     replayedDays: args.takeoffDays,
     slots: slots.length,
     readySlots,
     dataQualityFrequency,
-    zQuantiles: { p50: quantileOf(0.5), p90: quantileOf(0.9), p99: quantileOf(0.99), max: quantileOf(1) },
+    surpriseQuantiles: { p50: quantileOf(0.5), p90: quantileOf(0.9), p99: quantileOf(0.99), max: quantileOf(1) },
+    calibration: { nominal01: +observedAt(1).toFixed(4), nominal001: +observedAt(2).toFixed(4), nominal0001: +observedAt(3).toFixed(4) },
+    modelThresholds: ladder.model,
+    scoresWritten: args.writeScores ? scored.length : 0,
+    candidateCount: candidates.length,
     firedCount: fired.length,
     severityFrequency: tally(fired.map((event) => event.severity)),
     fired: fired.slice(0, 20),
+    topCandidates: [...candidates].sort((left, right) => right.surprise - left.surprise).slice(0, 8),
   };
 }
 
@@ -335,8 +373,14 @@ function assertBounds(report, args) {
       ok: !(report.takeoffRate.severityFrequency.critical > 0),
     },
     {
-      name: `takeoff replay: fired ${report.takeoffRate.firedCount} <= 0.2/day noise budget`,
-      ok: report.takeoffRate.firedCount <= Math.ceil(args.takeoffDays * 0.2),
+      // Public-tier firings against the stated budget, plus two of Poisson
+      // slack so one ordinary month cannot fail the instrument.
+      name: `takeoff replay: ${report.takeoffRate.firedCount} public alerts in ${args.takeoffDays}d <= ${TAKEOFF_ALERT_BUDGET_PER_YEAR.elevated}/yr budget`,
+      ok: report.takeoffRate.firedCount <= Math.ceil(args.takeoffDays * TAKEOFF_ALERT_BUDGET_PER_YEAR.elevated / 365) + 2,
+    },
+    {
+      name: `takeoff replay: 1-in-100 scores occurred in ${(report.takeoffRate.calibration.nominal001 * 100).toFixed(2)}% of slots (calibrated if <= 2%)`,
+      ok: report.takeoffRate.calibration.nominal001 <= 0.02,
     },
     {
       name: `takeoff replay: ${report.takeoffRate.readySlots} scoreable slots >= 336 (instrument warm)`,
@@ -364,7 +408,7 @@ function assertBounds(report, args) {
 
 function main() {
   const args = parseArgs(process.argv);
-  const db = new Database(path.resolve(args.db), { readonly: true, fileMustExist: true });
+  const db = new Database(path.resolve(args.db), { readonly: !args.writeScores, fileMustExist: true });
   db.pragma('busy_timeout = 30000');
   try {
     const rows = loadConcurrentRows(db);

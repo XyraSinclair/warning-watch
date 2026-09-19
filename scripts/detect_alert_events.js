@@ -25,7 +25,9 @@ function parseArgs(argv) {
     takeoffRateMinSamples: envNumber('EWS_TAKEOFF_RATE_MIN_SAMPLES'),
     takeoffRateMinDays: envNumber('EWS_TAKEOFF_RATE_MIN_DAYS', DEFAULT_TAKEOFF_RATE_MIN_DAYS),
     takeoffRateMinCount: Number(process.env.EWS_TAKEOFF_RATE_MIN_COUNT || 3),
-    takeoffRateZScore: Number(process.env.EWS_TAKEOFF_RATE_Z_SCORE || 3.5),
+    // Surprise at which a slot is recorded as an operator-surface event:
+    // 2 = a 1-in-100 slot, about one every two days.
+    takeoffRateSurprise: Number(process.env.EWS_TAKEOFF_RATE_SURPRISE || 2),
     // The takeoff-rate detector counts one consistent process: ground->air
     // transitions seen by the live slot ingester. Trace-backfilled events
     // (source adsbx_history, ~45x denser) must never enter the numerator or
@@ -68,8 +70,8 @@ function parseArgs(argv) {
       args.takeoffRateMinCount = Number(argv[++index]);
     } else if (value === '--takeoff-rate-min-days') {
       args.takeoffRateMinDays = Number(argv[++index]);
-    } else if (value === '--takeoff-rate-z-score') {
-      args.takeoffRateZScore = Number(argv[++index]);
+    } else if (value === '--takeoff-rate-surprise') {
+      args.takeoffRateSurprise = Number(argv[++index]);
     } else {
       throw new Error(`Unknown argument: ${value}`);
     }
@@ -158,6 +160,19 @@ function robustStats(values) {
   };
 }
 
+// "1-in-N" with two significant figures: 3.16 -> "1,500".
+function formatOdds(surprise) {
+  const odds = 10 ** Math.min(surprise, 15);
+  const scale = 10 ** Math.max(0, Math.floor(Math.log10(odds)) - 1);
+  return (Math.round(odds / scale) * scale).toLocaleString('en-US');
+}
+
+// "global_business_jet" -> "business-jet": alert copy is read by the public.
+function cohortLabel(cohort) {
+  return { global_business_jet: 'business-jet', global_military_aircraft: 'military', non_icao_untracked: 'non-ICAO' }[cohort]
+    || String(cohort).replace(/_/g, ' ');
+}
+
 function formatDecimal(value, digits = 1) {
   return Number(value).toLocaleString(undefined, {
     maximumFractionDigits: digits,
@@ -165,82 +180,148 @@ function formatDecimal(value, digits = 1) {
   });
 }
 
-function takeoffSeverityForZScore(zScore, ladder = { elevated: 5, high: 6.5, critical: 8 }) {
-  if (!ladder.calibrated) {
-    if (zScore >= ladder.critical) return 'critical';
-    if (zScore >= ladder.high) return 'high';
-    if (zScore >= ladder.elevated) return 'elevated';
-    return 'watch';
+// Takeoffs per slot are small counts (1-14 on a normal day), so they are
+// scored as counts, not as sigmas: a z-score reads "5 against 0.8 expected"
+// as 4.2 sigma when it is ordinary night-time noise. Measured on the live
+// record (52 days, 19 Sept 2026) the process is near-Poisson, dispersion
+// 1.0-2.3 in every hour, and this tail is calibrated: nominal 0.1 / 0.01 /
+// 0.001 occurred in 0.088 / 0.0088 / 0.0008 of slots.
+//
+// P(X >= count) for a count with mean `mean` and variance `dispersion * mean`:
+// negative binomial, Poisson in the limit dispersion -> 1. The upper tail is
+// summed directly so a probability of 1e-40 keeps its precision.
+function countUpperTail(count, mean, dispersion) {
+  if (!(count > 0)) return 1;
+  const mu = Math.max(mean, 1e-9);
+  const poisson = !(dispersion > 1 + 1e-6);
+  const size = poisson ? 0 : mu / (dispersion - 1);
+  const logFailure = poisson ? 0 : Math.log(1 - 1 / dispersion);
+  let logTerm = poisson ? -mu : -size * Math.log(dispersion);
+  let tail = 0;
+  for (let index = 0; index < count + 5000; index += 1) {
+    if (index >= count) {
+      const term = Math.exp(logTerm);
+      tail += term;
+      if (index > mu && term < tail * 1e-17) break;
+    }
+    logTerm += poisson
+      ? Math.log(mu / (index + 1))
+      : Math.log((size + index) / (index + 1)) + logFailure;
   }
-  if (!(zScore > ladder.elevated)) return 'watch';
-  if (ladder.high > ladder.elevated && zScore > ladder.high) {
-    if (ladder.critical > ladder.high && zScore > ladder.critical) return 'critical';
-    return 'high';
-  }
-  return 'elevated';
+  return Math.min(1, Math.max(tail, Number.MIN_VALUE));
 }
 
-function getTakeoffLadder(db, cohort, observedAt) {
+// Surprise = -log10 of the tail probability: 2 is a 1-in-100 slot, 4 a
+// 1-in-10,000 slot. `baseline` is the buildTakeoffBaseline result.
+function takeoffSurprise(count, baseline) {
+  return -Math.log10(countUpperTail(count, baseline.expectedTakeoffCount, baseline.takeoffDispersion));
+}
+
+// A past burst or an ingest cold start (24 June 2026: twenty slots of 100-567
+// "takeoffs") must not set the rate or the dispersion for the next 28 days.
+function clipCounts(values) {
+  const median = medianOf(values);
+  const cap = median + 4 * Math.sqrt(Math.max(median, 1));
+  return values.map((value) => Math.min(value, cap));
+}
+
+const SLOTS_PER_YEAR = 365 * 48;
+// Public alerts this detector may raise per year, per tier. Everything below
+// is derived from these three numbers.
+const TAKEOFF_ALERT_BUDGET_PER_YEAR = { elevated: 12, high: 4, critical: 1 };
+// A record shorter than this cannot certify the elevated rate, so it is not
+// consulted; the calibrated model thresholds stand alone.
+const TAKEOFF_RECORD_MIN_SAMPLES = Math.ceil(SLOTS_PER_YEAR / TAKEOFF_ALERT_BUDGET_PER_YEAR.elevated);
+// The record guards against a miscalibrated model, which shifts the bulk of
+// scores by a fraction of a decade. It may not lift a threshold by more than
+// this many decades, or the first day of a real event would mute the second.
+const TAKEOFF_RECORD_MAX_LIFT = 2;
+// Second gate (see "How detection works" on the page): the public tiers need
+// the stated magnitude, a 3x exodus, not only an improbable count.
+const TAKEOFF_EXODUS_RATIO = 3;
+
+function takeoffSeverity(surprise, ladder) {
+  for (const severity of ['critical', 'high', 'elevated']) {
+    if (surprise >= ladder.model[severity] && (!ladder.record || surprise > ladder.record[severity])) {
+      return severity;
+    }
+  }
+  return 'watch';
+}
+
+function ensureSlotScores(db) {
+  const columns = db.prepare("SELECT name FROM pragma_table_info('slot_scores')").all().map((column) => column.name);
+  if (columns.includes('takeoff_rate_z')) {
+    // Pre-19-Sept rows hold z-scores, not comparable with surprise. The
+    // record is regenerated by `backtest_detector.js --write-scores`.
+    db.exec('DROP TABLE slot_scores');
+  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS slot_scores (
       cohort TEXT NOT NULL,
       sampled_at TEXT NOT NULL,
-      takeoff_rate_z REAL,
+      takeoff_surprise REAL,
       count INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (cohort, sampled_at)
     )
   `);
+}
+
+function recordSlotScore(db, cohort, sampledAt, surprise, count) {
+  db.prepare(`
+    INSERT INTO slot_scores (cohort, sampled_at, takeoff_surprise, count)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(cohort, sampled_at) DO UPDATE SET
+      takeoff_surprise = excluded.takeoff_surprise,
+      count = excluded.count
+  `).run(cohort, parseIso(sampledAt, 'sampledAt').toISOString(), surprise, count);
+}
+
+// Two thresholds per tier, and a slot must clear both. `model` is the budget
+// turned into a tail probability (12 a year = p <= 12/17,520 = surprise 3.16).
+// `record` is the same budget read off the trailing year of actual scores:
+// strictly exceeding the k-th largest of n puts a new slot in the top k, a
+// rate of k/(n+1) per slot, with k = floor(budget * n / slots-per-year) so
+// the rate never exceeds the budget. While the record is too short to hold
+// even one budgeted slot for a tier (k = 0), that tier must beat the maximum.
+function takeoffModelThresholds() {
+  return Object.fromEntries(Object.entries(TAKEOFF_ALERT_BUDGET_PER_YEAR).map(
+    ([severity, perYear]) => [severity, -Math.log10(perYear / SLOTS_PER_YEAR)],
+  ));
+}
+
+function getTakeoffLadder(db, cohort, observedAt) {
+  ensureSlotScores(db);
+  const model = takeoffModelThresholds();
   // Exclude the evaluated slot (including reruns) and future replay rows.
   const parameters = {
     cohort,
     start: isoOffset(observedAt, -365 * DAY_MS),
     end: parseIso(observedAt, 'observedAt').toISOString(),
   };
-  const record = db.prepare(`
-    SELECT COUNT(*) AS samples,
-      (MAX(unixepoch(sampled_at)) - MIN(unixepoch(sampled_at))) / 1800.0 AS span_slots,
-      MAX(takeoff_rate_z) AS maximum
+  const scores = db.prepare(`
+    SELECT takeoff_surprise AS surprise
     FROM slot_scores
     WHERE cohort = @cohort AND sampled_at >= @start AND sampled_at < @end
-      AND takeoff_rate_z IS NOT NULL
-  `).get(parameters);
-  const samples = record.samples;
-  const spanSlots = record.span_slots || 0;
-  const k = Object.fromEntries(
-    [['elevated', 12], ['high', 4], ['critical', 1]].map(([severity, rate]) =>
-      [severity, Math.max(1, Math.ceil(rate * spanSlots / (365 * 48)))]),
-  );
-  const ladder = {
-    calibrated: samples >= 500,
-    samples,
-    window_days: spanSlots / 48,
-    span_slots: spanSlots,
-    k,
-    elevated: 5,
-    high: 6.5,
-    critical: 8,
-  };
-  if (ladder.calibrated) {
-    // A strict exceedance of the (k+1)-th largest admits at most k past slots,
-    // including when scores tie at the boundary.
-    const quantile = db.prepare(`
-      SELECT takeoff_rate_z AS threshold
-      FROM slot_scores
-      WHERE cohort = @cohort AND sampled_at >= @start AND sampled_at < @end
-        AND takeoff_rate_z IS NOT NULL
-      ORDER BY takeoff_rate_z DESC
-      LIMIT 1 OFFSET @offset
-    `);
-    for (const severity of ['elevated', 'high', 'critical']) {
-      ladder[severity] = quantile.get({
-        ...parameters,
-        offset: Math.min(samples - 1, k[severity]),
-      }).threshold;
-    }
-    ladder.critical = record.maximum;
+      AND takeoff_surprise IS NOT NULL
+    ORDER BY takeoff_surprise DESC
+    LIMIT @limit
+  `);
+  const samples = db.prepare(`
+    SELECT COUNT(*) AS samples
+    FROM slot_scores
+    WHERE cohort = @cohort AND sampled_at >= @start AND sampled_at < @end
+      AND takeoff_surprise IS NOT NULL
+  `).get(parameters).samples;
+  const ladder = { budgetPerYear: TAKEOFF_ALERT_BUDGET_PER_YEAR, model, samples, record: null };
+  if (samples >= TAKEOFF_RECORD_MIN_SAMPLES) {
+    const top = scores.all({ ...parameters, limit: TAKEOFF_ALERT_BUDGET_PER_YEAR.elevated }).map((row) => row.surprise);
+    ladder.record = Object.fromEntries(Object.entries(TAKEOFF_ALERT_BUDGET_PER_YEAR).map(([severity, perYear]) => {
+      const k = Math.floor(perYear * samples / SLOTS_PER_YEAR);
+      return [severity, Math.min(top[Math.max(k, 1) - 1], model[severity] + TAKEOFF_RECORD_MAX_LIFT)];
+    }));
   }
-  ladder.tiers_distinct = ladder.elevated < ladder.high && ladder.high < ladder.critical;
   return ladder;
 }
 
@@ -496,7 +577,24 @@ function buildTakeoffBaseline(rows, window, options) {
     baselineTier = 'global';
     baselineValues = allCounts;
   }
-  const baselineStats = robustStats(baselineValues);
+  // Rate: mean of the clipped group, with half a count of prior so a group of
+  // zeros is a low rate, not an impossible one.
+  const clippedBaseline = clipCounts(baselineValues);
+  const expectedTakeoffCount = (clippedBaseline.reduce((sum, value) => sum + value, 0) + 0.5) / Math.max(clippedBaseline.length, 1);
+  // Dispersion: Pearson chi-square pooled over every (day class, slot) group in
+  // the lookback. One group of ~20 samples cannot estimate a variance; all of
+  // them together can. Floored at 1, the Poisson limit.
+  let chiSquare = 0;
+  let degreesOfFreedom = 0;
+  for (const values of groups.values()) {
+    if (values.length < 3) continue;
+    const clipped = clipCounts(values);
+    const mean = clipped.reduce((sum, value) => sum + value, 0) / clipped.length;
+    if (!(mean > 0)) continue;
+    chiSquare += clipped.reduce((sum, value) => sum + (value - mean) ** 2, 0) / mean;
+    degreesOfFreedom += clipped.length - 1;
+  }
+  const takeoffDispersion = degreesOfFreedom > 0 ? Math.max(1, chiSquare / degreesOfFreedom) : 1;
 
   const sampleDays = new Set(usableRows.map((row) => parseIso(row.sampledAt, 'sampledAt').toISOString().slice(0, 10)));
   const requiredSampleCount = Math.max(
@@ -513,19 +611,18 @@ function buildTakeoffBaseline(rows, window, options) {
   );
   const modelReady = allCounts.length >= requiredSampleCount && sampleDays.size >= requiredDayCount;
   return {
-    model: 'takeoff-rate-seasonal-robust',
+    model: 'takeoff-rate-seasonal-negbin',
     modelReady,
     sampleCount: allCounts.length,
     sampleDayCount: sampleDays.size,
     requiredSampleCount,
     requiredDayCount,
-    expectedTakeoffCount: baselineStats.median,
-    takeoffStdDev: baselineStats.rawSigma,
-    effectiveTakeoffStdDev: baselineStats.sigma,
+    expectedTakeoffCount,
+    takeoffDispersion,
     baselineTier,
     baselineDayClass: windowDayClass,
     baselineSlotOfDay: windowSlotOfDay,
-    baselineGroupSampleCount: baselineStats.sampleCount,
+    baselineGroupSampleCount: baselineValues.length,
     nonLiveSlotsExcluded: rows.length - usableRows.length,
   };
 }
@@ -720,7 +817,7 @@ function buildEvents({
   takeoffRateMinSamples,
   takeoffRateMinDays,
   takeoffRateMinCount,
-  takeoffRateZScore,
+  takeoffRateSurprise,
   takeoffLiveSource,
   cusumK,
   cusumThreshold,
@@ -754,17 +851,15 @@ function buildEvents({
     takeoffRateMinDays,
     takeoffLiveSource,
   });
-  const takeoffRateZ = (takeoffs.length - takeoffRateStats.expectedTakeoffCount) / takeoffRateStats.effectiveTakeoffStdDev;
+  const surprise = takeoffSurprise(takeoffs.length, takeoffRateStats);
   const ladder = getTakeoffLadder(db, cohort, occurredAt);
-  if (takeoffScoringActive) {
-    db.prepare(`
-      INSERT INTO slot_scores (cohort, sampled_at, takeoff_rate_z, count)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(cohort, sampled_at) DO UPDATE SET
-        takeoff_rate_z = excluded.takeoff_rate_z,
-        count = excluded.count
-    `).run(cohort, parseIso(occurredAt, 'occurredAt').toISOString(), takeoffRateZ, takeoffs.length);
+  // A slot scored on an unready baseline would seed the record with noise.
+  if (takeoffScoringActive && takeoffRateStats.modelReady) {
+    recordSlotScore(db, cohort, occurredAt, surprise, takeoffs.length);
   }
+  const takeoffUnusual = takeoffScoringActive && takeoffRateStats.modelReady && surprise >= takeoffRateSurprise;
+  const takeoffMagnitude = takeoffs.length >= Math.max(takeoffRateMinCount, TAKEOFF_EXODUS_RATIO * takeoffRateStats.expectedTakeoffCount);
+  const label = cohortLabel(cohort);
   const aircraft = compactAircraftList(takeoffs);
   const events = [];
 
@@ -776,7 +871,7 @@ function buildEvents({
       eventKey: `data_quality:${cohort}:${occurredAt}`,
       occurredAt,
       title: 'Ingest feed degraded — detection suppressed for this slot',
-      message: `The upstream feed carried ${Math.round(dataQuality.currentTotal).toLocaleString()} aircraft vs a recent same-slot median of ${Math.round(dataQuality.referenceMedian).toLocaleString()}; anomaly scoring for ${cohort} is suppressed until feed volume recovers.`,
+      message: `The upstream feed carried ${Math.round(dataQuality.currentTotal).toLocaleString()} aircraft vs a recent same-slot median of ${Math.round(dataQuality.referenceMedian).toLocaleString()}; anomaly scoring for ${label} aircraft is suppressed until feed volume recovers.`,
       payloadJson: JSON.stringify({
         signalFamily: 'data_quality',
         cohort,
@@ -798,7 +893,7 @@ function buildEvents({
       eventKey: `takeoff_batch:${cohort}:${takeoffWindow.windowStart}:${takeoffWindow.windowEnd}`,
       occurredAt,
       title: `${takeoffs.length} tracked aircraft became airborne`,
-      message: `${takeoffs.length} tracked aircraft in ${cohort} became airborne within ${takeoffWindow.windowMinutes} minutes ending ${occurredAt}.`,
+      message: `${takeoffs.length} tracked ${label} aircraft became airborne within ${takeoffWindow.windowMinutes} minutes ending ${occurredAt}.`,
       payloadJson: JSON.stringify({
         signalFamily: 'takeoff_batch',
         cohort,
@@ -813,19 +908,16 @@ function buildEvents({
     });
   }
 
-  if (
-    takeoffScoringActive &&
-    takeoffRateStats.modelReady &&
-    takeoffRateZ >= takeoffRateZScore
-  ) {
+  if (takeoffUnusual) {
     events.push({
       kind: 'takeoff_rate_anomaly',
-      severity: takeoffs.length < takeoffRateMinCount ? 'watch' : takeoffSeverityForZScore(takeoffRateZ, ladder),
+      // Two gates: improbable under the baseline, and a 3x exodus in absolute terms.
+      severity: takeoffMagnitude ? takeoffSeverity(surprise, ladder) : 'watch',
       cohort,
       eventKey: `takeoff_rate_anomaly:${cohort}:${takeoffWindow.windowStart}:${takeoffWindow.windowEnd}`,
       occurredAt,
       title: `${takeoffs.length} takeoffs vs ${formatDecimal(takeoffRateStats.expectedTakeoffCount)} expected`,
-      message: `${cohort} produced ${takeoffs.length} takeoffs within ${takeoffWindow.windowMinutes} minutes, ${formatDecimal(takeoffRateZ)}σ above its recent takeoff-rate baseline. Ladder (365-day record, ${ladder.samples} slots): elevated ${ladder.calibrated ? '>' : '>='} ${ladder.elevated}, high ${ladder.calibrated ? '>' : '>='} ${ladder.high}, critical ${ladder.calibrated ? '>' : '>='} ${ladder.critical}.`,
+      message: `${takeoffs.length} ${label} takeoffs in ${takeoffWindow.windowMinutes} minutes against ${formatDecimal(takeoffRateStats.expectedTakeoffCount)} expected for this half-hour: about a 1-in-${formatOdds(surprise)} slot under the last ${takeoffRateLookbackDays} days' pattern. A public alert needs ${TAKEOFF_EXODUS_RATIO}x the expected count and a 1-in-${formatOdds(ladder.model.elevated)} slot or rarer.`,
       payloadJson: JSON.stringify({
         signalFamily: 'takeoff_rate',
         model: takeoffRateStats.model,
@@ -836,15 +928,16 @@ function buildEvents({
         windowMinutes: takeoffWindow.windowMinutes,
         takeoffCount: takeoffs.length,
         expectedTakeoffCount: takeoffRateStats.expectedTakeoffCount,
-        takeoffStdDev: takeoffRateStats.takeoffStdDev,
-        effectiveTakeoffStdDev: takeoffRateStats.effectiveTakeoffStdDev,
+        takeoffDispersion: takeoffRateStats.takeoffDispersion,
         baselineTier: takeoffRateStats.baselineTier,
         baselineDayClass: takeoffRateStats.baselineDayClass,
         baselineSlotOfDay: takeoffRateStats.baselineSlotOfDay,
         baselineGroupSampleCount: takeoffRateStats.baselineGroupSampleCount,
-        takeoffRateZScore: takeoffRateZ,
-        takeoffRateZScoreThreshold: takeoffRateZScore,
+        takeoffSurprise: surprise,
+        takeoffSurpriseThreshold: takeoffRateSurprise,
         takeoffRateMinCount,
+        exodusRatio: TAKEOFF_EXODUS_RATIO,
+        magnitudeGate: takeoffMagnitude,
         ladder,
         sampleCount: takeoffRateStats.sampleCount,
         sampleDayCount: takeoffRateStats.sampleDayCount,
@@ -866,7 +959,7 @@ function buildEvents({
       eventKey: `statistical_anomaly:${cohort}:${occurredAt}`,
       occurredAt,
       title: `Emergency level ${emergencyLevel} aircraft activity anomaly`,
-      message: `${cohort} reached emergency level ${emergencyLevel}: ${Math.round(concurrentCount).toLocaleString()} airborne vs ${Math.round(expectedCount).toLocaleString()} expected.`,
+      message: `${Math.round(concurrentCount).toLocaleString()} ${label} aircraft airborne against ${Math.round(expectedCount).toLocaleString()} expected for this half-hour (level ${emergencyLevel} of 5).`,
       payloadJson: JSON.stringify({
         signalFamily: 'concurrent_count',
         cohort,
@@ -883,15 +976,19 @@ function buildEvents({
     });
   }
 
-  if (!feedDegraded && concurrentBaseline.ready && takeoffs.length >= takeoffBatchMin && emergencyLevel >= takeoffAnomalyLevel) {
+  // Agreement rule: the concurrent count is anomalous AND the takeoff count is
+  // itself unusual. (Until 19 Sept 2026 the takeoff side was "at least three
+  // took off", true of almost every daytime slot, so this rule only lowered
+  // the concurrent bar from level 5 to 4.)
+  if (!feedDegraded && concurrentBaseline.ready && takeoffUnusual && emergencyLevel >= takeoffAnomalyLevel) {
     events.push({
       kind: 'takeoff_anomaly',
       severity: severityForLevel(emergencyLevel),
       cohort,
       eventKey: `takeoff_anomaly:${cohort}:${takeoffWindow.windowStart}:${takeoffWindow.windowEnd}`,
       occurredAt,
-      title: `${takeoffs.length} takeoffs during emergency level ${emergencyLevel}`,
-      message: `${takeoffs.length} tracked aircraft became airborne while ${cohort} was at emergency level ${emergencyLevel}.`,
+      title: `${takeoffs.length} takeoffs while airborne count is at level ${emergencyLevel}`,
+      message: `${takeoffs.length} ${label} takeoffs in ${takeoffWindow.windowMinutes} minutes against ${formatDecimal(takeoffRateStats.expectedTakeoffCount)} expected (about a 1-in-${formatOdds(surprise)} slot), while ${Math.round(concurrentCount).toLocaleString()} were airborne against ${Math.round(expectedCount).toLocaleString()} expected. Two measurements agree.`,
       payloadJson: JSON.stringify({
         signalFamily: 'takeoff_during_concurrent_anomaly',
         cohort,
@@ -901,6 +998,8 @@ function buildEvents({
         windowMinutes: takeoffWindow.windowMinutes,
         emergencyLevel,
         takeoffCount: takeoffs.length,
+        expectedTakeoffCount: takeoffRateStats.expectedTakeoffCount,
+        takeoffSurprise: surprise,
         concurrentCount,
         expectedCount,
         zScore,
@@ -931,7 +1030,7 @@ function buildEvents({
         eventKey: `sustained_shift:${cohort}:${severity}:${occurredAt}`,
         occurredAt,
         title: 'Sustained above-baseline aircraft activity',
-        message: `${cohort} concurrent activity: cumulative deviation ${formatDecimal(cusum.state.s)} >= ${formatDecimal(threshold)} threshold (drift allowance ${formatDecimal(cusumK, 2)}σ per slot).`,
+        message: `${label} aircraft airborne: cumulative deviation ${formatDecimal(cusum.state.s)} >= ${formatDecimal(threshold)} threshold (drift allowance ${formatDecimal(cusumK, 2)}σ per slot).`,
         payloadJson: JSON.stringify({
           signalFamily: 'sustained_shift',
           cohort,
@@ -956,7 +1055,7 @@ function buildEvents({
       ? { s: cusum.state.s, advanced: cusum.advanced, frozen: cusum.frozen === true, crossings: cusum.crossings }
       : null,
     takeoffCount: takeoffs.length,
-    takeoffRateZScore: takeoffRateZ,
+    takeoffSurprise: surprise,
     takeoffRateModelReady: takeoffRateStats.modelReady,
     takeoffRateSampleCount: takeoffRateStats.sampleCount,
     takeoffRateSampleDayCount: takeoffRateStats.sampleDayCount,
@@ -1005,7 +1104,7 @@ function main() {
       takeoffRateSampleDayCount: result.takeoffRateSampleDayCount,
       takeoffRateRequiredSampleCount: result.takeoffRateRequiredSampleCount,
       takeoffRateRequiredDayCount: result.takeoffRateRequiredDayCount,
-      takeoffRateZScore: result.takeoffRateZScore,
+      takeoffSurprise: result.takeoffSurprise,
       dataQuality: result.dataQuality?.status,
       cusum: result.cusum,
       candidateEvents: result.events.length,
@@ -1032,7 +1131,13 @@ module.exports = {
   getTakeoffEvents,
   getTakeoffWindow,
   getDataQuality,
-  takeoffSeverityForZScore,
+  takeoffSurprise,
+  takeoffSeverity,
+  takeoffModelThresholds,
+  ensureSlotScores,
+  recordSlotScore,
+  TAKEOFF_ALERT_BUDGET_PER_YEAR,
+  TAKEOFF_EXODUS_RATIO,
   severityForLevel,
   cusumStep,
   isUnlearnedHolidayWindow,
