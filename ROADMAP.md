@@ -33,7 +33,7 @@ healthy; ntfy round-trip canary passing.
 | A4 | `takeoff_anomaly` bypasses the 11 Sept ladder | severity comes straight from the concurrent emergency level; "4 takeoffs during emergency level 4" published as HIGH. The audit overweighted this: it caused 2 of the 28 | fixed 19 Sept: the rule now needs the takeoff count to be unusual itself (two measurements agreeing), not "three took off" |
 | A5 | Ladder still on fallback thresholds | 198 of the 500 scored slots it needs. Deeper: a rank threshold over n slots admits (k+1)/(n+1) per slot, so at n = 500 it permitted ~17 alerts per 90 days whatever the score | fixed 19 Sept: thresholds are the budget as a tail probability; the record (backfilled by replay, 2,533 slots) is a second guard consulted only from 1,460 slots, and can only raise a threshold |
 | A6 | Count data scored as sigma | "5 takeoffs vs 0 expected, 5σ" on a near-zero baseline is not a rare event. This was the root cause of A3 | fixed 19 Sept: negative-binomial surprise; on the live record the tail is calibrated (nominal 0.1 / 0.01 / 0.001 → observed 0.083 / 0.0075 / 0.0004) and the nightly self-test now asserts it |
-| A7 | Nightly self-test failed 10 consecutive nights unheard | takeoff replay fired 9 against a 0.2/day budget; the watchdog suppresses repeat pages while the problem set is unchanged. The check itself counted raw triggers, not public alerts, so it measured the wrong quantity | self-test fixed and passing 19 Sept (0 public alerts in 120 days against the 12/yr budget); the watchdog's silence is rung 3 |
+| A7 | Nightly self-test failed 10 consecutive nights unheard | takeoff replay fired 9 against a 0.2/day budget; The audit said the watchdog suppressed repeat pages. The journal says the opposite: it sent ~150 pages in 14 days (133 carrying this failure), among a false pair every night at 02:10 UTC and two-minute bursts, all at one priority with no age. The page was sent; it had stopped meaning anything. The check itself also counted raw triggers, not public alerts | fixed 19 Sept: self-test passes (0 public alerts in 120 days against the 12/yr budget); watchdog pages per problem and escalates (rung 3) |
 | A8 | Alert copy leaks internal identifiers | `global_military_aircraft` in public text | fixed 19 Sept for the aviation detector's five event kinds; other detectors unaudited |
 | A9 | Fresh-box bootstrap never enabled the CBRN or self-test timers | `deploy/bootstrap.sh` timer list | fixed 19 Sept |
 | A10 | README station count unexplained | README: 17,384 EURDEP stations; live: 3,658 reporting | open |
@@ -58,10 +58,18 @@ Each rung closes before the next opens; each is judged by a number.
    injected-exodus replay, not on a caught event. A 3× night-time exodus
    (6 against 2) is invisible to one slot by design; the sustained-shift
    accumulator carries it.
-3. **A watchdog that cannot go quiet** (A7, A2's canary). A failure that
-   persists escalates instead of being suppressed; a skipped channel reports
-   `skipped`, never `ok`. Exit: an injected persistent failure re-pages on
-   schedule.
+3. **A watchdog whose pages mean something** (A7, A2's canary — done
+   19 Sept). Retitled from "cannot go quiet": measured, it was never quiet, it
+   was crying wolf. Problems are tracked one by one, ignoring the numbers in
+   their text; 3-minute hold, 6-hourly on day one, `urgent` and daily from
+   24 hours with the age in the title; the backup-in-progress false alarm is
+   fixed at its source; canary channels report `verified` / `skipped` /
+   `failed`. Exit met on a fake clock at the real two-minute cadence: a
+   10-day failure pages 4 times on day one then daily at urgent (14 pages,
+   was ~130); a one-run blip pages 0; a churning minute counter pages once;
+   a failure flapping every run still pages on schedule. Not done: nothing
+   off the box watches the box. The canary runs on the same host, so if
+   the host dies nothing pages at all; that is D4, still unbuilt.
 4. **Nuclear monitoring worth the name.** Below.
 5. **Published firing record.** Every public alert, its ladder, and its
    after-the-fact verdict on the page. Trust is the empirical alert frequency

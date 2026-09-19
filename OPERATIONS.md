@@ -34,6 +34,18 @@ topic (`EWS_NTFY_OPS_TOPIC` in `/etc/warning-watch.env`) whenever the
 verdict goes unhealthy, and a recovery note when it heals. Its own timer and
 delivery path must also remain healthy; silence alone proves neither.
 
+A page must mean something, so the schedule is per problem (`decide` in
+`ops_alert.js`, pure, runnable on a fake clock). A problem is identified by its
+text with the numbers removed. It pages once it has lasted 3 minutes, again
+every 6 hours through its first day, then at 24 hours and daily after at
+`urgent` priority with its age in the title. It is over only after 10 minutes
+of absence, so a flapping failure neither storms nor hides, and a one-run blip
+pages nothing. One recovery note goes out when every paged problem has cleared.
+The reason is the record: in the two weeks to 19 Sept 2026 the old
+hash-of-the-whole-set rule sent about 150 pages (a false pair every night while
+the backup was mid-write, bursts every two minutes from a minute counter in the
+text), and the one real failure inside them went unacted-on for ten days.
+
 Continuation work is tracked as beads: `br ready` lists what is unblocked
 (see ROADMAP.md for the full arc).
 
@@ -55,11 +67,11 @@ token).
 | `warning-watch-cbrn.timer` | `cbrn_refresh.js` — collect the CBRN instruments (gamma telemetry, sampled air traffic), run the four directional detectors and the fusion pass; writes alert events only, never deliveries | every 5 min, one flocked pass |
 | `warning-watch-refresh-imports.timer` | same plus aircraft-metadata reimport | daily 00:29 |
 | `warning-watch-repair.timer` | `repair_history_gaps.js` — self-heals trailing gaps AND interior holes across all three cohorts, bounded to 30 days | every 6 h |
-| `warning-watch-watchdog.timer` | `ops_alert.js` — status verdict → ops ntfy topic (deduped, 6 h re-alert, recovery note) | every 2 min |
+| `warning-watch-watchdog.timer` | `ops_alert.js` — status verdict → ops ntfy topic (per-problem: 3 min hold, 6 h re-page, daily `urgent` from 24 h, recovery note) | every 2 min |
 | `warning-watch-backup.timer` | `backup_databases.js` — `VACUUM INTO data/backups/<day>/` for all five DBs (three aviation cohorts, `ews-watch.sqlite`, `ews-cbrn.sqlite`), integrity-checked, 14 days kept; staleness feeds the existing status verdict. Restore requires stopping all relevant writers first. Off-box: manual sha256-verified copies land at `xyra-sanctuary:/srv/sanctuary/backups/warning-watch/<day>/` (automation pending a box→sanctuary credential) | daily 02:10 |
 | `cloudflared.service` | Cloudflare tunnel (id `d27a04ac-5b8a-4d84-a4c9-ccf61978694d`; its label in the Cloudflare dashboard is still the pre-rename `apocalypse-ews` — cosmetic, the connector authenticates by id) — serves <https://warning.watch> from loopback:3030 and <https://ntfy.warning.watch> from loopback:2586 with no open inbound ports. Installed via `cloudflared service install <token>`; ingress config lives in the CF dashboard/API (`config_src: cloudflare`), not on disk | always on |
 | `ntfy.service` | self-hosted ntfy 2.27.0 (`/etc/ntfy/server.yml`): loopback:2586, `auth-default-access: read-only`, user `publisher` has rw on both topics, `upstream-base-url: ntfy.sh` for iOS instant delivery. Auth DB `/var/lib/ntfy/user.db`. Box-side publishers use `EWS_NTFY_SERVER=http://127.0.0.1:2586` (loopback survives a tunnel outage; subscribers reconnect and receive cached messages) | always on |
-| `warning-watch-canary.timer` | `canary_delivery.js` — synthetic end-to-end proof through the **public** path: site health, RSS, and an ops-topic ntfy publish polled back as a subscriber would. Deliberately the opposite path from the watchdog (loopback), so each pages when the other's path dies. Failure leaves the unit `failed`, which the status verdict flags | weekly Mon 17:00 UTC |
+| `warning-watch-canary.timer` | `canary_delivery.js` — synthetic end-to-end proof through the **public** path: site health, RSS, and an ops-topic ntfy publish polled back as a subscriber would. Deliberately the opposite path from the watchdog (loopback), so each pages when the other's path dies. Each check reports `verified`, `skipped`, or `failed`; email and SMS are `skipped` until a live-send canary exists, never ok. Failure leaves the unit `failed`, which the status verdict flags | weekly Mon 17:00 UTC |
 
 **Public site: <https://warning.watch>** (apoc.watch and earlywarning.watch
 301-redirect there). All three domains are on Xyra's Porkbun account with

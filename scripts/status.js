@@ -152,7 +152,10 @@ function backupsReport() {
   const latestDay = days[days.length - 1];
   const files = safe(() => fs.readdirSync(path.join(backupRoot, latestDay)).filter((f) => f.endsWith('.sqlite')), []);
   const ageHours = +(((Date.now() - Date.parse(`${latestDay}T02:10:00Z`)) / 3600000).toFixed(1));
-  return { latestDay, dayCount: days.length, latestFiles: files.length, ageHours };
+  // A day directory still being written is not a short backup: it paged a
+  // false alarm every night at 02:10 UTC until 19 Sept 2026.
+  const dirAgeMinutes = safe(() => (Date.now() - fs.statSync(path.join(backupRoot, latestDay)).mtimeMs) / 60000, Infinity);
+  return { latestDay, dayCount: days.length, latestFiles: files.length, ageHours, inProgress: files.length < 5 && dirAgeMinutes < 30 };
 }
 
 function alertsReport() {
@@ -387,6 +390,7 @@ if (report.cbrn) {
 }
 if (report.backups) {
   if (!report.backups.dayCount) problems.push('no sqlite backups yet — run npm run backup');
+  else if (report.backups.inProgress) { /* judged once the write has had 30 minutes */ }
   else if (report.backups.latestFiles < 5) problems.push(`latest backup day ${report.backups.latestDay} has ${report.backups.latestFiles}/5 databases`);
   else if (report.backups.ageHours > 50) problems.push(`sqlite backups stale (${report.backups.ageHours}h) — check warning-watch-backup.timer`);
 }

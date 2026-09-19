@@ -44,12 +44,15 @@ const NTFY_TOKEN = String(process.env.EWS_NTFY_TOKEN || '').trim();
 
 const checks = [];
 
+// A check is verified, skipped, or failed. A channel nobody exercised is
+// `skipped`; it is never reported as ok.
 async function check(name, fn) {
   try {
-    const detail = await fn();
-    checks.push({ name, ok: true, ...(detail ? { detail } : {}) });
+    const outcome = await fn();
+    if (outcome?.skipped) checks.push({ name, status: 'skipped', detail: outcome.skipped });
+    else checks.push({ name, status: 'verified' });
   } catch (error) {
-    checks.push({ name, ok: false, error: error.message });
+    checks.push({ name, status: 'failed', error: error.message });
   }
 }
 
@@ -76,7 +79,7 @@ async function main() {
 
   await check('ntfy_roundtrip', async () => {
     if (!OPS_TOPIC || !NTFY_TOKEN) throw new Error('EWS_NTFY_OPS_TOPIC / EWS_NTFY_TOKEN not configured');
-    const soFar = checks.every((entry) => entry.ok) ? 'site and RSS verified' : 'site or RSS FAILED — see status';
+    const soFar = checks.every((entry) => entry.status === 'verified') ? 'site and RSS verified' : 'site or RSS FAILED — see status';
     await fetchOk(`${NTFY_PUBLIC}/${OPS_TOPIC}`, {
       method: 'POST',
       headers: {
@@ -92,17 +95,18 @@ async function main() {
   });
 
   await check('email_channel', async () => {
-    if (!String(process.env.SENDGRID_API_KEY || '').trim()) return 'skipped: provider not configured';
-    return 'configured (live-send canary not yet implemented — extend when provider activates)';
+    if (!String(process.env.SENDGRID_API_KEY || '').trim()) return { skipped: 'provider not configured' };
+    return { skipped: 'provider configured, but no live-send canary exists yet: delivery is unproven' };
   });
 
   await check('sms_channel', async () => {
-    if (!String(process.env.TELNYX_API_KEY || '').trim()) return 'skipped: provider not configured';
-    return 'configured (live-send canary not yet implemented — extend when provider activates)';
+    if (!String(process.env.TELNYX_API_KEY || '').trim()) return { skipped: 'provider not configured' };
+    return { skipped: 'provider configured, but no live-send canary exists yet: delivery is unproven' };
   });
 
-  const failed = checks.filter((entry) => !entry.ok);
-  console.log(JSON.stringify({ ok: failed.length === 0, canaryId, checks }));
+  const failed = checks.filter((entry) => entry.status === 'failed');
+  const names = (status) => checks.filter((entry) => entry.status === status).map((entry) => entry.name);
+  console.log(JSON.stringify({ ok: failed.length === 0, canaryId, verified: names('verified'), skipped: names('skipped'), failed: names('failed'), checks }));
   process.exit(failed.length ? 1 : 0);
 }
 

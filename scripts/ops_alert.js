@@ -6,17 +6,98 @@
 // silently for five weeks: data problems must reach a human.
 //
 // - No-ops when EWS_NTFY_OPS_TOPIC is unset.
-// - Deduplicates: an unchanged problem set re-alerts at most every 6 hours.
-// - Sends a one-time recovery note when health returns after an alert.
+// - A page must mean something. In the two weeks to 19 Sept 2026 this sent
+//   ~150 pages: a false pair every night while the backup was mid-write,
+//   bursts every two minutes because a minute counter in the problem text
+//   changed the problem set's hash, and the one real failure (the nightly
+//   self-test) repeated identically four times a day. Nobody acted on it for
+//   ten days. So: each problem is tracked on its own, identified by its text
+//   with the numbers removed; it pages once it has lasted HOLD_MS; it re-pages
+//   every 6 h on its first day and daily after that, at urgent priority, with
+//   its age in the title. A problem is over only after CLEAR_MS of absence, so
+//   a flapping failure can neither storm nor hide.
+// - Sends one recovery note when every paged problem has cleared.
 
 const fs = require('node:fs');
 const path = require('node:path');
-const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const STATE_PATH = path.join(ROOT_DIR, 'tmp', 'ops-alert-state.json');
-const REALERT_MS = 6 * 60 * 60 * 1000;
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+const HOLD_MS = 3 * MINUTE_MS;
+const CLEAR_MS = 10 * MINUTE_MS;
+
+function problemKey(text) {
+  return String(text).replace(/\d+(\.\d+)?/g, '#');
+}
+
+function formatAge(ms) {
+  if (ms >= DAY_MS) return `${Math.floor(ms / DAY_MS)}d ${Math.floor((ms % DAY_MS) / HOUR_MS)}h`;
+  if (ms >= HOUR_MS) return `${Math.floor(ms / HOUR_MS)}h ${Math.floor((ms % HOUR_MS) / MINUTE_MS)}m`;
+  return `${Math.max(1, Math.round(ms / MINUTE_MS))}m`;
+}
+
+// Pure: (previous state, the problems seen now, the time) -> next state and
+// at most one page. Kept free of I/O so the schedule can be run on a fake clock.
+function decide(previous, problemTexts, nowMs) {
+  const records = { ...(previous.problems || {}) };
+  for (const text of problemTexts) {
+    const key = problemKey(text);
+    records[key] = { firstSeenMs: nowMs, lastPagedMs: null, ...records[key], text, lastSeenMs: nowMs };
+  }
+  const recovered = [];
+  for (const [key, record] of Object.entries(records)) {
+    if (nowMs - record.lastSeenMs >= CLEAR_MS) {
+      if (record.lastPagedMs) recovered.push(record);
+      delete records[key];
+    }
+  }
+  const open = Object.values(records).filter((record) => nowMs - record.firstSeenMs >= HOLD_MS);
+  const present = open.filter((record) => record.lastSeenMs === nowMs);
+  const due = present.filter((record) => {
+    if (!record.lastPagedMs) return true;
+    // Crossing one day is itself due: the first urgent page lands at 24 h.
+    const escalatesAtMs = record.firstSeenMs + DAY_MS;
+    if (nowMs >= escalatesAtMs && record.lastPagedMs < escalatesAtMs) return true;
+    return nowMs - record.lastPagedMs >= (nowMs < escalatesAtMs ? 6 * HOUR_MS : DAY_MS);
+  });
+
+  let page = null;
+  if (due.length) {
+    const listed = [...present].sort((left, right) => left.firstSeenMs - right.firstSeenMs);
+    const oldestMs = nowMs - listed[0].firstSeenMs;
+    page = {
+      kind: 'alert',
+      title: oldestMs >= HOUR_MS ? `Warning Watch unhealthy for ${formatAge(oldestMs)}` : 'Warning Watch unhealthy',
+      priority: oldestMs >= DAY_MS ? 'urgent' : 'high',
+      body: [
+        'Warning Watch on xyra-dev-hetzner:',
+        ...listed.map((record) => `- ${record.text} (for ${formatAge(nowMs - record.firstSeenMs)})`),
+        '',
+        oldestMs >= DAY_MS
+          ? 'This has outlasted every automatic repair. It needs a person. It will page daily until it clears.'
+          : 'The repair timer runs every 6 hours. This pages again in 6 hours if it persists.',
+      ].join('\n'),
+    };
+    for (const record of listed) record.lastPagedMs = nowMs;
+  } else if (recovered.length && !Object.values(records).some((record) => record.lastPagedMs)) {
+    page = {
+      kind: 'recovery',
+      title: 'Warning Watch recovered',
+      priority: 'default',
+      body: [
+        'Cleared:',
+        ...recovered.map((record) => `- ${record.text} (lasted ${formatAge(record.lastSeenMs - record.firstSeenMs)})`),
+        '',
+        'Nothing else is open. No action needed.',
+      ].join('\n'),
+    };
+  }
+  return { state: { problems: records }, page };
+}
 
 function loadEnvFile(filePath) {
   try {
@@ -86,44 +167,20 @@ async function main() {
     process.exit(healthy ? 0 : 1);
   }
 
-  const state = readState();
-  const problemsHash = crypto.createHash('sha256').update(JSON.stringify(problems)).digest('hex').slice(0, 16);
-
-  if (healthy) {
-    if (state.alerting) {
-      await publish(
-        'Warning Watch recovered',
-        'All cohorts are ingesting again and every service is healthy. No action needed.',
-        'default'
-      );
-      writeState({ alerting: false });
-      console.log(JSON.stringify({ ok: true, healthy: true, sent: 'recovery' }));
-      return;
-    }
-    console.log(JSON.stringify({ ok: true, healthy: true }));
-    return;
-  }
-
-  const unchanged = state.alerting && state.problemsHash === problemsHash;
-  const recentlySent = state.sentAtMs && Date.now() - state.sentAtMs < REALERT_MS;
-  if (unchanged && recentlySent) {
-    console.log(JSON.stringify({ ok: true, healthy: false, suppressed: true, problems }));
-    process.exit(1);
-  }
-
-  const body = [
-    'The plane-flight monitor on xyra-dev-hetzner is unhealthy:',
-    ...problems.map((p) => `- ${p}`),
-    '',
-    'The 6-hourly repair timer will attempt self-healing; if this repeats, check `journalctl -u warning-watch-refresh` on the box.',
-  ].join('\n');
-  await publish('Warning Watch unhealthy', body, 'high');
-  writeState({ alerting: true, problemsHash, sentAtMs: Date.now() });
-  console.log(JSON.stringify({ ok: true, healthy: false, sent: 'alert', problems }));
-  process.exit(1);
+  // Publish before writing state: a page that failed to send is retried on
+  // the next run instead of being recorded as sent.
+  const { state, page } = decide(readState(), problems, Date.now());
+  if (page) await publish(page.title, page.body, page.priority);
+  writeState(state);
+  console.log(JSON.stringify({ ok: true, healthy, ...(page ? { sent: page.kind, priority: page.priority } : {}), problems }));
+  process.exit(healthy ? 0 : 1);
 }
 
-main().catch((error) => {
-  console.error(String(error));
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(String(error));
+    process.exit(1);
+  });
+}
+
+module.exports = { decide, problemKey, HOLD_MS, CLEAR_MS };
