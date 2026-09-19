@@ -84,7 +84,7 @@ the public.
 
 | Layer | Today | Gap |
 |---|---|---|
-| Ambient gamma | BfS + EURDEP mirror, hourly, coherence-gated; EPA RadNet from 19 Sept (140 US monitors, hourly, persistence-gated: CBRN-WATCH.md § 3) | Nothing over East or South Asia, the Middle East, Russia. Checked 19 Sept: Safecast's open API is sparse and mostly stale, Japan NRA has no data feed |
+| Ambient gamma | BfS + EURDEP mirror, hourly, coherence-gated; EPA RadNet from 19 Sept (140 US monitors, hourly, persistence-gated: CBRN-WATCH.md § 3; live: 140/140 answered, 111 reporting within 3 h, an hourly poll is 7 s and 5.7 MB, 133,307 readings seeded so 136 monitors are armed) | Nothing over East or South Asia, the Middle East, Russia. Checked 19 Sept: Safecast's open API is sparse and mostly stale, Japan NRA has no data feed |
 | Detonation | Rule live 19 Sept: classification `nuclear explosion` → critical; M ≥ 3.5 in a test-site geofence → high when shallow or when the depth is undetermined at a seismically quiet site, elevated when undetermined at an active one; `explosion` M ≥ 4 anywhere → elevated (CBRN-WATCH.md § 6a) | Replayed on the catalogue since 2000: all six DPRK tests critical, one non-test high, eight elevated in 26.7 years. Not yet seen: a live first-solution's latency and typing |
 | Facility events | NRC event notifications + reactor status | United States only |
 | Official warning | NWS CAP nuclear / radiological / hazmat types, relayed verbatim at critical | United States only |
