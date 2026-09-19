@@ -38,6 +38,7 @@ healthy; ntfy round-trip canary passing.
 | A9 | Fresh-box bootstrap never enabled the CBRN or self-test timers | `deploy/bootstrap.sh` timer list | fixed 19 Sept |
 | A10 | README station count unexplained | README: 17,384 EURDEP stations; live: 3,658 reporting | open |
 | A11 | Public dashboard JSON exposed server filesystem paths | `page.dbPath` and `liveStatus.cachePath` in `/dashboard.json`, both sibling files and `/api/dashboard`; a 503 message named the snapshot path | fixed 19 Sept |
+| A12 | The only off-box database copy is 20 days old | `xyra-sanctuary:/srv/sanctuary/backups/warning-watch/` holds one day, 2026-08-30 — before the CBRN layer existed, so `ews-cbrn.sqlite` and `ews-watch.sqlite` have no off-box copy; automation waits on a box→sanctuary credential | open |
 
 ### The climb, in order
 
