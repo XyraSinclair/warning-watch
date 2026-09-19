@@ -96,13 +96,20 @@ Fetched 19 Sept: EPA RadNet serves near-real-time hourly gamma (the earlier
 "laboratory data only" note was wrong) and is now ingested; Safecast's
 measurements API returns 2018 as its newest rows and its realtime device list is
 a few dozen volunteer sensors, most silent for weeks; Japan NRA's monitoring
-site is a browser app with no data endpoint. Still to try: national CAP feeds
-beyond NWS. CTBTO IMS and IAEA USIE stay out: treaty- and member-restricted.
+site is a browser app with no data endpoint. Non-US official warnings, fetched
+19 Sept and both usable: Canada's NAADS (`rss1.naad-adna.pelmorex.com`, Atom
+with CAP 1.1 categories — 212 live entries, 1.2 MB, every alert linking its full
+CAP XML in the `capcp1` archive; today's are all Environment Canada weather, so
+the CBRN filter is the `category`/`event` terms) and Germany's NINA MoWaS
+(`warnung.bund.de/api31/mowas/mapData.json`, 3 live civil-protection warnings
+with BBK event codes; `dwd`, `katwarn`, `biwapp`, `lhp`, `police` sit beside it).
+MeteoAlarm's legacy atom is gone (404); the UK and Japan publish no feed. CTBTO
+IMS and IAEA USIE stay out: treaty- and member-restricted.
 
 Order within rung 4: detonation rule first (done 19 Sept: one feed already
 ingested, highest consequence, lowest false-alarm surface), then gamma coverage
 outside Europe (RadNet done 19 Sept; nothing further is openly available), then
-non-US official warnings.
+non-US official warnings (next: NAADS and NINA, verified above, not yet built).
 
 ## CBRN alarm layer (implemented 10 September 2026)
 
