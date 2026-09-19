@@ -29,12 +29,12 @@ healthy; ntfy round-trip canary passing.
 |---|---|---|---|
 | A1 | The page's only subscribe instruction named an invalid ntfy topic | `warning.watch` is not a legal topic; alerts published elsewhere | fixed 19 Sept |
 | A2 | The page promised email, SMS and web push | no provider credentials on the box, no signup surface; the canary passes those channels by skipping them | claim removed 19 Sept; canary still reports a skip as `ok` |
-| A3 | Public alert rate ~20× target | 20 public-tier alerts in 24 days (10 elevated, 8 high, 1 critical, 1 notice) against "roughly monthly"; 19 of 20 from takeoff detectors | open |
-| A4 | `takeoff_anomaly` bypasses the 11 Sept ladder | severity comes straight from the concurrent emergency level; "4 takeoffs during emergency level 4" published as HIGH | open |
-| A5 | Ladder still on fallback thresholds | 198 of the 500 scored slots it needs | open (time, or backfill the score record) |
-| A6 | Count data scored as sigma | "5 takeoffs vs 0 expected, 5σ" on a near-zero baseline is not a rare event | open |
-| A7 | Nightly self-test failed 10 consecutive nights unheard | takeoff replay fired 9 against a 0.2/day budget; the watchdog suppresses repeat pages while the problem set is unchanged | open |
-| A8 | Alert copy leaks internal identifiers | `global_military_aircraft` in public text | open |
+| A3 | Public alert rate ~20× target | 20 public-tier alerts in 24 days (10 elevated, 8 high, 1 critical, 1 notice) against "roughly monthly"; 19 of 20 from takeoff detectors. Full record since 14 July: 28 public alerts, 25 from `takeoff_rate_anomaly`, 2 from `takeoff_anomaly`, 1 official notice | fixed 19 Sept: replayed over the whole live record (2,533 slots) the new score raises 0 |
+| A4 | `takeoff_anomaly` bypasses the 11 Sept ladder | severity comes straight from the concurrent emergency level; "4 takeoffs during emergency level 4" published as HIGH. The audit overweighted this: it caused 2 of the 28 | fixed 19 Sept: the rule now needs the takeoff count to be unusual itself (two measurements agreeing), not "three took off" |
+| A5 | Ladder still on fallback thresholds | 198 of the 500 scored slots it needs. Deeper: a rank threshold over n slots admits (k+1)/(n+1) per slot, so at n = 500 it permitted ~17 alerts per 90 days whatever the score | fixed 19 Sept: thresholds are the budget as a tail probability; the record (backfilled by replay, 2,533 slots) is a second guard consulted only from 1,460 slots, and can only raise a threshold |
+| A6 | Count data scored as sigma | "5 takeoffs vs 0 expected, 5σ" on a near-zero baseline is not a rare event. This was the root cause of A3 | fixed 19 Sept: negative-binomial surprise; on the live record the tail is calibrated (nominal 0.1 / 0.01 / 0.001 → observed 0.083 / 0.0075 / 0.0004) and the nightly self-test now asserts it |
+| A7 | Nightly self-test failed 10 consecutive nights unheard | takeoff replay fired 9 against a 0.2/day budget; the watchdog suppresses repeat pages while the problem set is unchanged. The check itself counted raw triggers, not public alerts, so it measured the wrong quantity | self-test fixed and passing 19 Sept (0 public alerts in 120 days against the 12/yr budget); the watchdog's silence is rung 3 |
+| A8 | Alert copy leaks internal identifiers | `global_military_aircraft` in public text | fixed 19 Sept for the aviation detector's five event kinds; other detectors unaudited |
 | A9 | Fresh-box bootstrap never enabled the CBRN or self-test timers | `deploy/bootstrap.sh` timer list | fixed 19 Sept |
 | A10 | README station count unexplained | README: 17,384 EURDEP stations; live: 3,658 reporting | open |
 | A11 | Public dashboard JSON exposed server filesystem paths | `page.dbPath` and `liveStatus.cachePath` in `/dashboard.json`, both sibling files and `/api/dashboard`; a 503 message named the snapshot path | fixed 19 Sept |
@@ -46,12 +46,18 @@ Each rung closes before the next opens; each is judged by a number.
 
 1. **Truthful surface** (A1, A2, A9 — done). Every sentence on the page is
    checked against the live system.
-2. **Silence the aviation noise** (A3–A6, A8). Aviation alerts stay on the
-   operator surface until the detector earns the public tier: route
-   `takeoff_anomaly` through the empirical ladder, replace sigma on counts with
-   a Poisson-tail score plus an absolute floor that scales with the baseline,
-   backfill the score record so the ladder leaves fallback. Exit: the replay
-   self-test passes and the 90-day public alert count is ≤ 3.
+2. **Silence the aviation noise** (A3–A6, A8 — done 19 Sept, `cb2d34b`).
+   Takeoffs are scored as counts (negative-binomial surprise); thresholds are
+   the 12 / 4 / 1 per-year budget as tail probabilities; the public tiers also
+   need 3× the expected count; the score record is backfilled by replay and
+   guards the thresholds from above. Exit met: the replay self-test passes on
+   the live box and the detector raises 0 public alerts over the whole
+   67-day live record (the old score raised 25). What this does not prove:
+   the record contains no real exodus, so sensitivity rests on arithmetic
+   (3× in the afternoon, 39 against 13, scores 5.6 — critical) and on the
+   injected-exodus replay, not on a caught event. A 3× night-time exodus
+   (6 against 2) is invisible to one slot by design; the sustained-shift
+   accumulator carries it.
 3. **A watchdog that cannot go quiet** (A7, A2's canary). A failure that
    persists escalates instead of being suppressed; a skipped channel reports
    `skipped`, never `ok`. Exit: an injected persistent failure re-pages on
