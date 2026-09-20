@@ -20,11 +20,12 @@ const ALERTABLE_EVENT_KINDS = ['statistical_anomaly', 'takeoff_anomaly', 'takeof
 // CBRN events share one cohort across both operator-only (`watch`) and public
 // severities, so kind alone cannot decide delivery: the severity condition is
 // what keeps thirty routine notices on the operator surface instead of in a
-// subscriber's inbox. Aviation kinds keep their existing unconditional
-// behaviour, and `watch` never leaves the operator surface for any cohort.
+// subscriber's inbox. Aviation kinds emit `watch` too (takeoff_rate_anomaly
+// since 14 Sept), so one severity gate covers every kind: `watch` never leaves
+// the operator surface, as on the ntfy rail.
 const CBRN_ALERTABLE_KINDS = ['cbrn_radiation_anomaly', 'cbrn_airspace_void', 'cbrn_aircraft_emergency', 'cbrn_special_aircraft', 'cbrn_lexical_burst', 'cbrn_official_notice', 'cbrn_seismic_event', 'cbrn_fused'];
 const DELIVERABLE_KINDS = [...ALERTABLE_EVENT_KINDS, ...CBRN_ALERTABLE_KINDS];
-const DELIVERABLE_CONDITION = `(kind IN (${ALERTABLE_EVENT_KINDS.map(() => '?').join(', ')}) OR (kind IN (${CBRN_ALERTABLE_KINDS.map(() => '?').join(', ')}) AND severity <> 'watch'))`;
+const DELIVERABLE_CONDITION = `(kind IN (${DELIVERABLE_KINDS.map(() => '?').join(', ')}) AND severity <> 'watch')`;
 
 
 class HttpError extends Error {
