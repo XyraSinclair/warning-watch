@@ -156,6 +156,34 @@ function readSources(db) {
   }
 }
 
+// The N1 gauge. The detonation rule can only be as fast as USGS reaches us:
+// minutes from origin time to our first sight of each event of M >= 4.5 (the
+// relevant feed is polled every 5 minutes, so that interval is inside the
+// number), and what USGS called it first. Evidence is append-only, so the
+// earliest row per event is its first sight.
+function readSeismicLag(db) {
+  const empty = { events: 0, p50Minutes: null, p95Minutes: null, firstTypes: {}, since: null };
+  if (!db) return empty;
+  try {
+    const rows = db.prepare(
+      `SELECT (first_seen - strftime('%s', occurred_at) * 1000) / 60000.0 AS lagMinutes, classification
+         FROM (SELECT MIN(observed_at) AS first_seen, json_extract(observation, '$.occurredAt') AS occurred_at,
+                      json_extract(observation, '$.data.magnitude') AS magnitude,
+                      json_extract(observation, '$.data.classification') AS classification
+                 FROM watch_evidence WHERE source_id = 'usgs-relevant' GROUP BY external_id)
+        WHERE magnitude >= 4.5 AND occurred_at IS NOT NULL ORDER BY lagMinutes`,
+    ).all();
+    if (rows.length === 0) return empty;
+    const since = db.prepare("SELECT MIN(observed_at) AS t FROM watch_evidence WHERE source_id = 'usgs-relevant'").get().t;
+    const at = (q) => Math.round(rows[Math.min(rows.length - 1, Math.floor(q * rows.length))].lagMinutes);
+    const firstTypes = {};
+    for (const row of rows) firstTypes[row.classification ?? "unknown"] = (firstTypes[row.classification ?? "unknown"] ?? 0) + 1;
+    return { events: rows.length, p50Minutes: at(0.5), p95Minutes: at(0.95), firstTypes, since: since == null ? null : new Date(since).toISOString() };
+  } catch {
+    return empty;
+  }
+}
+
 function readCohorts() {
   return COHORTS.map(([key, label, envKey, file]) => {
     const db = open(resolveDb(envKey) || path.join(DATA_DIR, file));
@@ -190,6 +218,7 @@ function getStatusSummary(mainDbPath) {
       aviation: readAviation(main),
       cohorts: readCohorts(),
       sources: readSources(watch),
+      seismicLag: readSeismicLag(watch),
     };
   } finally {
     cbrn?.close();

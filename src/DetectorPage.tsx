@@ -18,6 +18,7 @@ type Status = {
   };
   cohorts: Cohort[];
   sources: { id: string; lastSuccessAt: string | null; health: 'live' | 'stale' | 'never' }[];
+  seismicLag: { events: number; p50Minutes: number | null; p95Minutes: number | null; firstTypes: Record<string, number>; since: string | null };
   channels: Channels;
 };
 
@@ -248,6 +249,20 @@ export default function DetectorPage() {
             six North Korean tests are catalogued this way. Over 26.7 years natural earthquakes raised this rule nine
             times, about one every three years: eight elevated, and one high, the aftershock the 2017 test itself
             induced. This rule cannot see an atmospheric burst or a test at an unlisted site.
+            {status && status.seismicLag.events > 0 && (
+              <>
+                {' '}It is as fast as the catalogue: over {num.format(status.seismicLag.events)} events of magnitude 4.5
+                or more since {utc(status.seismicLag.since)}, USGS reached us a median{' '}
+                {num.format(status.seismicLag.p50Minutes ?? 0)} minutes after origin time, 95 % within{' '}
+                {num.format(status.seismicLag.p95Minutes ?? 0)}, five-minute polling included; the first published
+                type was{' '}
+                {Object.entries(status.seismicLag.firstTypes)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([type, count]) => `${type} for ${num.format(count)}`)
+                  .join(', ')}
+                . No North Korean test has been typed a nuclear explosion inside the first hour.
+              </>
+            )}
           </dd>
           <dt>Air traffic over a region</dt>
           <dd>
