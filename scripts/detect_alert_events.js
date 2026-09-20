@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const Database = require('better-sqlite3');
+const { UPSERT_STATUS_SQL } = require('../server/publication');
 
 const DEFAULT_TAKEOFF_RATE_MIN_DAYS = 7;
 const DEFAULT_CONCURRENT_MIN_HISTORY_SAMPLES = 7 * 48;
@@ -229,8 +230,8 @@ const SLOTS_PER_YEAR = 365 * 48;
 // Public alerts this detector may raise per year, per tier. Everything below
 // is derived from these three numbers.
 const TAKEOFF_ALERT_BUDGET_PER_YEAR = { elevated: 12, high: 4, critical: 1 };
-// A record shorter than this cannot certify the elevated rate, so it is not
-// consulted; the calibrated model thresholds stand alone.
+// A record shorter than this cannot certify the elevated rate, so the
+// public tiers wait for it; until then every takeoff-rate event is watch.
 const TAKEOFF_RECORD_MIN_SAMPLES = Math.ceil(SLOTS_PER_YEAR / TAKEOFF_ALERT_BUDGET_PER_YEAR.elevated);
 // The record guards against a miscalibrated model, which shifts the bulk of
 // scores by a fraction of a decade. It may not lift a threshold by more than
@@ -241,8 +242,12 @@ const TAKEOFF_RECORD_MAX_LIFT = 2;
 const TAKEOFF_EXODUS_RATIO = 3;
 
 function takeoffSeverity(surprise, ladder) {
+  // Until the record can certify the elevated rate, the model's thresholds
+  // stand alone and the tier is not public: the military replay raised about
+  // twice the budget on model thresholds alone (20 September 2026).
+  if (!ladder.record) return 'watch';
   for (const severity of ['critical', 'high', 'elevated']) {
-    if (surprise >= ladder.model[severity] && (!ladder.record || surprise > ladder.record[severity])) {
+    if (surprise >= ladder.model[severity] && surprise > ladder.record[severity]) {
       return severity;
     }
   }
@@ -375,10 +380,7 @@ function updateExistingEvent(db, existing, event) {
       title = @title,
       message = @message,
       payload_json = @payloadJson,
-      status = CASE
-        WHEN status IN ('processing', 'sent', 'no_recipients', 'partial', 'failed') THEN status
-        ELSE @status
-      END
+      status = ${UPSERT_STATUS_SQL}
     WHERE id = @id
   `).run({ ...event, id: existing.id });
 }

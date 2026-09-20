@@ -17,8 +17,32 @@ type Status = {
     departures: { records: number; days: number; newest: string | null; ageMinutes: number | null };
   };
   cohorts: Cohort[];
+  sources: { id: string; lastSuccessAt: string | null; health: 'live' | 'stale' | 'never' }[];
   channels: Channels;
 };
+
+const SOURCE_NAMES: Record<string, string> = {
+  'nws-civil-alerts': 'NWS CAP warnings',
+  'nrc-events': 'NRC event notifications',
+  'nrc-reactor-status': 'NRC reactor status',
+  'faa-tfr': 'FAA flight restrictions',
+  'usgs-significant': 'USGS significant events',
+  'usgs-relevant': 'USGS relevant events',
+  'bluesky-posts': 'Bluesky posts',
+  'gdelt-reporting': 'GDELT reporting',
+};
+
+// The sentence a rule carries when its inputs are not answering.
+function inputState(sources: Status['sources'] | undefined, ids: string[]): string {
+  const rows = (sources ?? []).filter((source) => ids.includes(source.id));
+  if (rows.length === 0 || rows.some((source) => source.health === 'live')) return '';
+  const never = rows.every((source) => source.health === 'never');
+  return never
+    ? ' This rule has no input: its source has never answered us.'
+    : ' This rule has no live input: its sources stopped answering ' +
+        rows.map((source) => `${SOURCE_NAMES[source.id] ?? source.id} ${ago(source.lastSuccessAt)}`).join(', ') +
+        '.';
+}
 
 const NETWORK_NAMES: Record<string, string> = {
   de: 'Germany, BfS national network',
@@ -91,6 +115,8 @@ export default function DetectorPage() {
         <p className="purpose">
           We sample public data continuously and raise an alert when a measurement leaves its own baseline by more
           than a fixed threshold. Alerts carry the measurement and its numbers. Every threshold is stated below.
+          Our gamma networks cover Germany, the EURDEP exchange and the United States: an atmospheric burst anywhere
+          else is invisible to these instruments until an authority reports it.
         </p>
       </header>
 
@@ -245,17 +271,20 @@ export default function DetectorPage() {
           </dd>
           <dt>Takeoff volume</dt>
           <dd>
-            Business-jet takeoffs per half-hour, scored as a count against the same weekday class and half-hour over
+            Takeoffs per half-hour, scored as a count against the same weekday class and half-hour over
             28 days. Elevated needs three times the expected count and a count that chance alone produces in fewer
-            than 1 half-hour in 1,460 — twelve a year. High is 1 in 4,380; critical, 1 in 17,520. A slower exodus is
+            than 1 half-hour in 1,460 — twelve a year. High is 1 in 4,380; critical, 1 in 17,520. A cohort's public
+            tiers open once its scored record holds 1,460 half-hours; the business-jet record does, the military
+            record reaches it about 20 October 2026. A slower exodus is
             carried by a sustained-shift accumulator on the number airborne: 3× reaches high within an hour and
             critical within two.
           </dd>
           <dt>Notices</dt>
           <dd>
-            An NRC event notification at emergency class Alert, Site Area Emergency or General Emergency reports as
-            high; anything else as operator-only. An actual CAP warning of type Nuclear Power Plant, Radiological
-            Hazard or Hazardous Materials reports as critical, carrying the issuing authority's own text verbatim.
+            An actual CAP warning of type Nuclear Power Plant or Radiological Hazard reports as critical, and a
+            Hazardous Materials warning as high, carrying the issuing authority's own text verbatim. An NRC event
+            notification at emergency class Alert, Site Area Emergency or General Emergency reports as high; anything
+            else as operator-only.{inputState(status?.sources, ['nrc-events', 'nrc-reactor-status'])}
             Agency reporting — outbreak bulletins, IAEA news, aggregate disease feeds — is collected and stays on the
             operator surface. A published report is not one of our detections.
           </dd>
@@ -263,7 +292,7 @@ export default function DetectorPage() {
           <dd>
             Matched CBRN event words per place per hour against a 14-day same-hour baseline, minimum 10 samples.
             Elevated at 8 matched terms across 3 posts and three times the median; high at 25 across 8. Never
-            critical on its own.
+            critical on its own.{inputState(status?.sources, ['bluesky-posts', 'gdelt-reporting'])}
           </dd>
         </dl>
         <p>
@@ -274,8 +303,9 @@ export default function DetectorPage() {
         </p>
         <p>
           Each tier has a false-alarm budget, and thresholds are set from the measured record to meet it: elevated at
-          most twelve times a year, high four, critical one. An instrument that stops reporting raises its own alert.
-          A quiet page means nothing crossed a threshold. It never means nothing happened.
+          most twelve times a year, high four, critical one. An instrument that stops reporting pages the operator,
+          and the table below shows which inputs are answering. A quiet page means nothing crossed a threshold. It
+          never means nothing happened.
         </p>
         <p>
           Every rule on this page is code you can read:{' '}
@@ -314,6 +344,13 @@ export default function DetectorPage() {
               <td>{num.format(behaviour?.turnarounds24h ?? 0)} in the last 24 hours</td>
               <td>{num.format(behaviour?.hoursRecorded ?? 0)} hours recorded</td>
             </tr>
+            {(status?.sources ?? []).map((source) => (
+              <tr key={source.id}>
+                <th>{SOURCE_NAMES[source.id] ?? source.id}</th>
+                <td>{source.lastSuccessAt ? `last answered ${ago(source.lastSuccessAt)}` : 'has never answered'}</td>
+                <td className={source.health === 'live' ? 'ok' : 'warm'}>{source.health}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </section>

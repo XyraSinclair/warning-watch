@@ -892,10 +892,15 @@ the upstream reference site.
 - `scripts/refresh_all_snapshots.js` is the pipeline entrypoint and the
   authoritative ordering of stages.
 - `detect_alert_events.js` writes `alert_events` rows (UNIQUE event_key,
-  idempotent). Channel publishers each keep their own cursor in the `meta`
-  table: `local_push_last_alert_id` (owner xmsg push, elevated+ paged),
-  `ntfy_last_alert_id` (public ntfy topic, elevated+). Cursors advance past
-  skipped events; a failed send halts cursor advance so the event retries.
+  idempotent). `server/publication.js` is the one answer to "is this event
+  public" and the status clause every upsert uses: a rise to a higher public
+  severity puts the row back to `pending`, so subscribers hear the escalation.
+  `publications(event_id, rail, severity)` is the append-only firing record:
+  subscriber dispatch and the public ntfy rail write it, ntfy's work is the
+  public events with no row at their current severity plus retracted events it
+  carried with no `retracted` row (a correction). A failed send writes no row,
+  so the event retries. The operator push rail still keeps
+  `local_push_last_alert_id` in `meta`.
 - Severity ladder: watch < elevated < high < critical (see
   `severityForLevel` / `takeoffSeverity` in detect_alert_events.js).
 - Python does ingestion/backfill (`update_latest_heatmap.py`,

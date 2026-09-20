@@ -135,6 +135,27 @@ const COHORTS = [
   ["unregistered", "Aircraft broadcasting no registered address", "EWS_UNTRACKED_DB_PATH", "ews-untracked.sqlite"],
 ];
 
+// The watch sources that feed a rule on the page. Their health is a public
+// fact: a rule whose input has never answered is not an instrument.
+const RULE_SOURCES = ["nws-civil-alerts", "nrc-events", "nrc-reactor-status", "faa-tfr", "usgs-significant", "usgs-relevant", "bluesky-posts", "gdelt-reporting"];
+
+function readSources(db) {
+  if (!db) return [];
+  try {
+    const now = Date.now();
+    return db.prepare(
+      `SELECT id, success_at AS successAt, json_extract(definition, '$.staleSeconds') AS staleSeconds
+         FROM watch_sources WHERE enabled = 1 AND id IN (${RULE_SOURCES.map(() => "?").join(", ")}) ORDER BY id`,
+    ).all(...RULE_SOURCES).map((row) => ({
+      id: row.id,
+      lastSuccessAt: row.successAt == null ? null : new Date(row.successAt).toISOString(),
+      health: row.successAt == null ? "never" : now - row.successAt > Number(row.staleSeconds) * 1000 ? "stale" : "live",
+    }));
+  } catch {
+    return [];
+  }
+}
+
 function readCohorts() {
   return COHORTS.map(([key, label, envKey, file]) => {
     const db = open(resolveDb(envKey) || path.join(DATA_DIR, file));
@@ -156,8 +177,10 @@ function readCohorts() {
 function getStatusSummary(mainDbPath) {
   const mainPath = mainDbPath || resolveDb("EWS_DB_PATH") || path.join(DATA_DIR, "ews-main.sqlite");
   const cbrnPath = resolveDb("EWS_CBRN_DB_PATH") || path.join(DATA_DIR, "ews-cbrn.sqlite");
+  const watchPath = resolveDb("EWS_WATCH_DB_PATH") || path.join(DATA_DIR, "ews-watch.sqlite");
   const cbrn = open(cbrnPath);
   const main = open(mainPath);
+  const watch = open(watchPath);
   try {
     return {
       generatedAt: new Date().toISOString(),
@@ -166,10 +189,12 @@ function getStatusSummary(mainDbPath) {
       aircraft: readCbrnAircraft(cbrn),
       aviation: readAviation(main),
       cohorts: readCohorts(),
+      sources: readSources(watch),
     };
   } finally {
     cbrn?.close();
     main?.close();
+    watch?.close();
   }
 }
 

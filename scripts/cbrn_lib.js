@@ -30,6 +30,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const Database = require('better-sqlite3');
+const { UPSERT_STATUS_SQL } = require('../server/publication');
 
 const { severityForLevel, robustStats, medianOf, cusumStep } = require('./detect_alert_events.js');
 
@@ -288,7 +289,7 @@ function buildCbrnEvent({
 
 // Same upsert discipline as the aviation detector: a repeated event key
 // updates the existing row (severity, text, payload) instead of creating a
-// second alert, so a sustained anomaly escalates in place.
+// second alert; UPSERT_STATUS_SQL makes an escalation deliver again.
 function insertCbrnEvent(db, event) {
   const existing = db
     .prepare('SELECT id, severity, payload_json FROM alert_events WHERE event_key = ?')
@@ -303,10 +304,7 @@ function insertCbrnEvent(db, event) {
               message = @message,
               payload_json = @payloadJson,
               occurred_at = @occurredAt,
-              status = CASE
-                WHEN status IN ('processing', 'sent', 'no_recipients', 'partial', 'failed') THEN status
-                ELSE @status
-              END
+              status = ${UPSERT_STATUS_SQL}
         WHERE id = @id`,
     ).run({ ...event, id: existing.id });
     return { inserted: false, escalated: existing.severity !== event.severity, id: existing.id };

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const Database = require('better-sqlite3');
+const { SEVERITY_RANK, UPSERT_STATUS_SQL } = require('../server/publication');
 const { robustStats, medianOf, severityForLevel } = require('./detect_alert_events');
 
 const MINUTE = 60000;
@@ -94,11 +95,11 @@ function components(points, radiusKm = 60) {
 function upsert(db, event) {
   const existing = db.prepare('SELECT id, severity FROM alert_events WHERE event_key = @eventKey').get(event);
   if (existing) {
-    const ranks = { watch: 1, elevated: 3, high: 4, critical: 5 };
+    const ranks = SEVERITY_RANK;
     if (ranks[existing.severity] > ranks[event.severity]) return 'unchanged';
     db.prepare(`UPDATE alert_events SET severity = @severity, title = @title,
       message = @message, payload_json = @payloadJson,
-      status = CASE WHEN status IN ('processing', 'sent', 'no_recipients', 'partial', 'failed') THEN status ELSE @status END
+      status = ${UPSERT_STATUS_SQL}
       WHERE id = @id`).run({ ...event, id: existing.id });
     return ranks[event.severity] > ranks[existing.severity] ? 'escalated' : 'unchanged';
   }

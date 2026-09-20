@@ -403,7 +403,9 @@ async function assertAlertEventDetectionPreservesDispatchState() {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     'takeoff_rate_anomaly',
-    'high',
+    // Seeded at the top severity: a rise to a higher public severity is meant
+    // to re-deliver, so only a refresh at or below it preserves dispatch state.
+    'critical',
     'global_business_jet',
     eventKey,
     observedAt,

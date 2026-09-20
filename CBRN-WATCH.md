@@ -119,10 +119,11 @@ established to precede official reporting.
 
 ## 6. Authority — the one alert that is not ours
 
-An **actual, current** CAP alert of type *Nuclear Power Plant Warning*,
-*Radiological Hazard Warning* or *Hazardous Materials Warning* is relayed at
-`critical` with the issuing authority, the affected area, the expiry and the
-authority's own instruction text verbatim. Nothing of ours replaces or re-words
+An **actual, current** CAP alert of type *Nuclear Power Plant Warning* or
+*Radiological Hazard Warning* is relayed at `critical`, a *Hazardous Materials
+Warning* at `high` (a local spill paged to a global list at critical is the
+likeliest false critical in the system), with the issuing authority, the
+affected area, the expiry and the authority's own instruction text verbatim. Nothing of ours replaces or re-words
 their instruction. Every other CAP event type is excluded: this is a CBRN
 instrument, not an all-hazards one.
 

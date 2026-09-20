@@ -180,6 +180,15 @@ CREATE TABLE IF NOT EXISTS alert_events (
   bridge_summary_json TEXT
 );
 
+-- The firing record: what left the box, per rail, per severity; append-only.
+CREATE TABLE IF NOT EXISTS publications (
+  event_id INTEGER NOT NULL REFERENCES alert_events(id),
+  rail TEXT NOT NULL,
+  severity TEXT NOT NULL,
+  published_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (event_id, rail, severity)
+);
+
 CREATE INDEX IF NOT EXISTS idx_alert_events_status_created
   ON alert_events (status, created_at);
 

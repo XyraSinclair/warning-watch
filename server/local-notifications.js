@@ -8,7 +8,7 @@ const {
   normalizePushSubscriptionPayload,
   sendWebPush,
 } = require('./web-push');
-const { PUBLIC_EVENT_SQL } = require('./publication');
+const { PUBLIC_EVENT_SQL, recordPublication } = require('./publication');
 
 const ALERT_DISPATCH_LIMIT = 25;
 const EMAIL_CONCURRENCY = 8;
@@ -1077,6 +1077,7 @@ async function dispatchPendingAlerts(db, env = process.env, { limit = ALERT_DISP
           AND status = 'processing'
           AND dispatched_at = ?
       `).run(subscriberCount ? 'sent' : 'no_recipients', JSON.stringify({ deliveries: 0, reason }), alert.id, lease.stamp());
+      recordPublication(db, alert.id, 'subscribers');
       if (!subscriberCount) {
         summary.noRecipients += 1;
       }
@@ -1090,6 +1091,7 @@ async function dispatchPendingAlerts(db, env = process.env, { limit = ALERT_DISP
         AND status = 'processing'
         AND dispatched_at = ?
     `).run(totalFailed === 0 ? 'sent' : totalSent > 0 ? 'partial' : 'failed', JSON.stringify({ deliveries: totalDeliveries, sent: totalSent, failed: totalFailed }), alert.id, lease.stamp());
+    if (totalSent > 0) recordPublication(db, alert.id, 'subscribers');
   }
 
   return summary;

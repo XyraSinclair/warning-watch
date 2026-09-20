@@ -42,8 +42,10 @@ CBRN instruments ──► deterministic detectors ──► alert_events ──
   magnitude. A four-sigma drift on a quiet probe stays operator-only.
 - **Detection is evidence-bound**: no baseline → no alert. Missing or stale data
   means the instrument is unavailable, never that the world is safe.
-- **Keyed, cursored fanout**: repeated samples do not create new statistical
-  evidence. External delivery can remain uncertain after a lost acknowledgment.
+- **Keyed fanout with a firing record**: repeated samples do not create new
+  statistical evidence; an event that rises to a higher public severity is
+  delivered again, and every delivery is a row in `publications`. External
+  delivery can remain uncertain after a lost acknowledgment.
 - The aviation instrument keeps its own calibration and publishes dashboard
   JSON at `/dashboard.json`, `/military-dashboard.json` and
   `/untracked-dashboard.json`:
@@ -63,9 +65,10 @@ CBRN instruments ──► deterministic detectors ──► alert_events ──
 
 Public alerts appear on the single page at `/` and are pushed through the same
 channels as the aviation instrument. The highest-value alert in the system is
-not ours at all: an actual *Nuclear Power Plant Warning*, *Radiological Hazard
-Warning* or *Hazardous Materials Warning* CAP message is relayed at critical
-severity with the issuing authority's own instruction text verbatim.
+not ours at all: an actual *Nuclear Power Plant Warning* or *Radiological
+Hazard Warning* CAP message is relayed at critical severity, a *Hazardous
+Materials Warning* at high, with the issuing authority's own instruction text
+verbatim.
 
 ## Quickstart
 

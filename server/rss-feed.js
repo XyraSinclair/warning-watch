@@ -23,7 +23,8 @@ function rssItemFromAlertEvent(event, env = process.env) {
   const config = getRssConfig(env);
   const publishedAt = new Date(event.occurredAt || event.createdAt || Date.now());
   return {
-    guid: event.eventKey ? `ews-alert-${event.eventKey}` : `ews-alert-${event.id}`,
+    // One item per severity reached, so an escalation appears as a new item.
+    guid: `ews-alert-${event.eventKey || event.id}@${event.severity}`,
     title: event.title,
     summary: event.message,
     description: event.message,
