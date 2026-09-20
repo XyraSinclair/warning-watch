@@ -23,7 +23,7 @@ import urllib.request
 STATUS_URL = os.environ.get("DEADMAN_STATUS_URL", "https://warning.watch/api/status")
 NTFY_URL = os.environ.get("DEADMAN_NTFY_URL", "").strip()
 STATE_PATH = os.environ.get("DEADMAN_STATE", os.path.expanduser("~/.local/state/warning-watch-deadman.json"))
-STALE_MINUTES = 8
+STALE_MINUTES = 7
 FAILURES_TO_PAGE = 2
 REPAGE_HOURS = 6
 

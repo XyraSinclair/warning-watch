@@ -38,8 +38,9 @@ Everything above runs on the box, so none of it can report the box being gone.
 The off-box dead-man (`config/deadman/`) runs on a second machine of ours as a user timer
 every two minutes: it fetches `https://warning.watch/api/status` and pages a
 public ntfy.sh topic when two consecutive fetches fail, the payload is
-unreadable, or `aircraft.newestSample` is older than 8 minutes (the refresh
-timer runs every 2). It pages on the transition, every 6 hours while dead, and
+unreadable, or `aircraft.newestSample` is older than 7 minutes (the refresh
+timer runs every 2; the user manager on that box takes about a minute to
+spawn a unit under load, so a stall pages inside ten minutes). It pages on the transition, every 6 hours while dead, and
 sends one recovery note. The topic URL lives only in
 `~/.config/warning-watch/deadman.env` on that machine, never in this repo; the
 script and units are copied to `~/.local/lib/warning-watch-deadman/` and
