@@ -34,6 +34,18 @@ topic (`EWS_NTFY_OPS_TOPIC` in `/etc/warning-watch.env`) whenever the
 verdict goes unhealthy, and a recovery note when it heals. Its own timer and
 delivery path must also remain healthy; silence alone proves neither.
 
+Everything above runs on the box, so none of it can report the box being gone.
+The off-box dead-man (`config/deadman/`) runs on a second machine of ours as a user timer
+every two minutes: it fetches `https://warning.watch/api/status` and pages a
+public ntfy.sh topic when two consecutive fetches fail, the payload is
+unreadable, or `aircraft.newestSample` is older than 8 minutes (the refresh
+timer runs every 2). It pages on the transition, every 6 hours while dead, and
+sends one recovery note. The topic URL lives only in
+`~/.config/warning-watch/deadman.env` on that machine, never in this repo; the
+script and units are copied to `~/.local/lib/warning-watch-deadman/` and
+`~/.config/systemd/user/`. Proven 20 Sept 2026: two probes of a dead URL paged
+inside a minute, the next live probe sent the recovery note.
+
 A page must mean something, so the schedule is per problem (`decide` in
 `ops_alert.js`, pure, runnable on a fake clock). A problem is identified by its
 text with the numbers removed. It pages once it has lasted 3 minutes, again

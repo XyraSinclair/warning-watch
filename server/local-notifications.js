@@ -726,7 +726,7 @@ function channelAvailability(env) {
   };
 }
 
-async function sendEmail(env, { to, subject, text }) {
+async function sendEmail(env, { to, subject, text, unsubscribeUrl = null }) {
   const response = await fetch('https://api.postmarkapp.com/email', {
     method: 'POST',
     headers: {
@@ -740,6 +740,9 @@ async function sendEmail(env, { to, subject, text }) {
       Subject: subject,
       TextBody: text,
       MessageStream: String(env.POSTMARK_MESSAGE_STREAM || 'outbound'),
+      ...(unsubscribeUrl
+        ? { Headers: [{ Name: 'List-Unsubscribe', Value: `<${unsubscribeUrl}>` }] }
+        : {}),
     }),
   });
   const payload = await response.json().catch(() => ({}));
@@ -934,7 +937,12 @@ async function dispatchOne(db, env, alert, subscriber, channel, pacer = null, re
         ? await sendSms(env, { to: destination, text: buildSmsAlertText(env, alert, subscriber) })
         : channel === 'push'
           ? await sendPush(env, { subscription: subscriber.pushSubscription, payload: buildPushAlertText(env, alert) })
-          : await sendEmail(env, { to: destination, subject: alert.title, text: buildEmailAlertText(env, alert, subscriber) });
+          : await sendEmail(env, {
+            to: destination,
+            subject: alert.title,
+            text: buildEmailAlertText(env, alert, subscriber),
+            unsubscribeUrl: createSubscriberManagementUrl(env, subscriber),
+          });
     } finally {
       stopHeartbeat();
     }

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the warning.watch off-box dead-man every two minutes
+
+[Timer]
+OnCalendar=*-*-* *:01/2:00
+AccuracySec=10s
+Persistent=true
+Unit=warning-watch-deadman.service
+
+[Install]
+WantedBy=timers.target

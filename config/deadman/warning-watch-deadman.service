@@ -1,0 +1,7 @@
+[Unit]
+Description=Off-box dead-man for warning.watch (pages a public ntfy.sh topic when the site stops answering)
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/warning-watch/deadman.env
+ExecStart=/usr/bin/python3 %h/.local/lib/warning-watch-deadman/warning-watch-deadman.py
