@@ -856,7 +856,7 @@ The reference standards above remain a control map, not a certification claim.
 | **ntfy ops watchdog** | **live, self-hosted** — subscribe to `https://ntfy.warning.watch/warning-watch-ops`; unhealthy verdicts and recoveries only | nothing |
 | Owner push (xmsg → iMessage/email/desktop by severity) | retired with the laptop deployment (xmsg is Mac-only; `notify_local_push.js` silently no-ops on the box) | a box-reachable owner channel, if ever wanted |
 | Telegram channel | token wired (@XyraClawdBot, reused from xyra_claw — sends don't conflict with its polling) | one 45-second phone step: create channel, add bot as admin, set `TELEGRAM_CHANNEL` in `.env` |
-| Email (Postmark) | code ready, **double opt-in enforced** (signup sends a confirm link; only confirmed addresses are ever alerted; without `POSTMARK_SERVER_TOKEN` the sign-up route refuses the channel and the page does not offer it) | production deploy (below) |
+| Email (Postmark) | **live since 20 September 2026** (Postmark server `warning-watch`, sender domain `warning.watch` with DKIM and Return-Path verified, From `alerts@warning.watch`; sign-up, delivery and confirm exercised end to end), **double opt-in enforced** (signup sends a confirm link; only confirmed addresses are ever alerted; without `POSTMARK_SERVER_TOKEN` the sign-up route refuses the channel and the page does not offer it) | nothing |
 | SMS (Telnyx) | code ready, **double opt-in enforced** (same as email; without `TELNYX_API_KEY` the confirm path is logged) | production deploy (below) |
 | Browser push (VAPID) | keys generated in `.env` | production deploy (below) |
 
