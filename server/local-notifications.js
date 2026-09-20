@@ -147,13 +147,13 @@ function confirmationMessage(env, subscriber, channel) {
   const confirmUrl = createConfirmUrl(env, subscriber, channel) || createConfirmPath(env, subscriber, channel);
   if (channel === 'sms') {
     return {
-      text: `Warning Watch: confirm this number to receive airborne-anomaly alerts: ${confirmUrl} . Reply STOP to any alert to opt out.`,
+      text: `Warning Watch: confirm this number to receive alerts: ${confirmUrl} . Reply STOP to any alert to opt out.`,
     };
   }
   return {
     subject: 'Confirm your Warning Watch alert subscription',
     text: [
-      'Someone (hopefully you) asked to receive Warning Watch airborne-anomaly alerts at this address.',
+      'Someone (hopefully you) asked to receive Warning Watch alerts at this address.',
       `Confirm to start receiving alerts: ${confirmUrl}`,
       'If this was not you, ignore this message and nothing will be sent.',
     ].join('\n\n'),

@@ -416,8 +416,8 @@ app.get("/confirm", confirmLimiter, (request, response) => {
       "<style>body{font-family:system-ui,sans-serif;max-width:36rem;margin:15vh auto;padding:0 1.5rem;color:#1a1a1a}a{color:#0a5}</style>",
       "</head><body>",
       "<h1>Confirmed</h1>",
-      `<p>Your ${channelLabel} is confirmed. You will now receive airborne-anomaly alerts from this instrument.</p>`,
-      `<p><a href="${result.managementPath}">Manage or unsubscribe</a> &middot; <a href="/">Dashboard</a></p>`,
+      `<p>Your ${channelLabel} is confirmed. You will receive one message when an instrument crosses its threshold, and nothing else.</p>`,
+      `<p><a href="${result.managementPath}">Manage or unsubscribe</a> &middot; <a href="/">warning.watch</a></p>`,
       "</body></html>",
     ].join(""));
 });
