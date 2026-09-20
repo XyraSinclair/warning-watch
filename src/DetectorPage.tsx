@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import './detector.css';
+import { Channels, SubscribePanel } from './Subscribe';
 
 type Alert = { kind: string; severity: string; cohort: string; occurredAt: string; title: string; message: string };
 type Network = { source: string; stations: number; newestReading: string | null; ageMinutes: number | null };
+type Cohort = { key: string; label: string; roster: number; airborne: number | null; sampledAt: string | null; samples: number };
 
 type Status = {
   generatedAt: string;
@@ -14,7 +16,16 @@ type Status = {
     behaviour: { turnarounds24h: number; hoursRecorded: number; hourlySamples: number; armed: boolean };
     departures: { records: number; days: number; newest: string | null; ageMinutes: number | null };
   };
+  cohorts: Cohort[];
+  channels: Channels;
 };
+
+const NETWORK_NAMES: Record<string, string> = {
+  de: 'Germany, BfS national network',
+  eurdep: 'Europe, EURDEP exchange',
+  radnet: 'United States, EPA RadNet',
+};
+const SOURCE = 'https://github.com/XyraSinclair/warning-watch/blob/main';
 
 const POLL_MS = 60_000;
 
@@ -85,6 +96,8 @@ export default function DetectorPage() {
 
       {error && <p className="err">Status unavailable: {error}</p>}
 
+      <SubscribePanel channels={status?.channels ?? null} />
+
       <section>
         <h2>Alerts</h2>
         <h3 className="sub">Last seven days</h3>
@@ -122,33 +135,60 @@ export default function DetectorPage() {
       </section>
 
       <section>
-        <h2>Instruments</h2>
+        <h2>Flight tracking</h2>
+        <p>
+          We read the whole sky. Every half hour, every aircraft broadcasting a position anywhere on Earth is matched
+          against a roster of {num.format(status?.cohorts?.[0]?.roster ?? 0)} business jets and{' '}
+          {num.format(status?.cohorts?.[1]?.roster ?? 0)} military airframes, and aircraft broadcasting an address no
+          registry issued are counted beside them. Over {num.format(status?.aircraft.regions ?? 0)} watched regions, nuclear
+          plants and fuel-cycle sites, chemical complexes, two capitals and two control regions, we sample the airspace
+          every five minutes. The people with the most to lose and the best information
+          move first, and they move by air: {num.format(status?.aviation.departures.records ?? 0)} departures over{' '}
+          {num.format(status?.aviation.departures.days ?? 0)} days are the baseline every new half hour is scored
+          against.
+        </p>
         <table>
           <tbody>
+            {(status?.cohorts ?? []).map((cohort) => (
+              <tr key={cohort.key}>
+                <th>{cohort.label}</th>
+                <td>{cohort.airborne == null ? '—' : `${num.format(cohort.airborne)} airborne`}</td>
+                <td>{cohort.roster ? `of ${num.format(cohort.roster)} on the roster` : 'counted, not named'}</td>
+                <td>sampled {ago(cohort.sampledAt)}</td>
+              </tr>
+            ))}
             <tr>
-              <th>Gamma dose rate</th>
-              <td>{num.format(radiation?.stationsTotal ?? 0)} stations</td>
-              <td>{num.format(radiation?.reporting ?? 0)} networks reporting</td>
-              <td>last reading {ago(status?.radiation.networks?.[0]?.newestReading ?? null)}</td>
-            </tr>
-            <tr>
-              <th>Aircraft over CBRN sites</th>
-              <td>{num.format(status?.aircraft.regions ?? 0)} regions</td>
-              <td>5-minute samples</td>
-              <td>last sample {ago(status?.aircraft.newestSample ?? null)}</td>
-            </tr>
-            <tr>
-              <th>Business-jet movements</th>
-              <td>{num.format(status?.aviation.aircraft.tracked ?? 0)} airframes</td>
-              <td>one fix per 30 minutes</td>
-              <td>last fix {ago(status?.aviation.aircraft.newestFix ?? null)}</td>
-            </tr>
-            <tr>
-              <th>Business-jet departures</th>
-              <td>{num.format(status?.aviation.departures.records ?? 0)} records</td>
-              <td>{num.format(status?.aviation.departures.days ?? 0)} days</td>
+              <th>Departures</th>
+              <td>{num.format(status?.aviation.departures.records ?? 0)} recorded</td>
+              <td>{num.format(status?.aviation.behaviour.turnarounds24h ?? 0)} turnarounds in 24 hours</td>
               <td>last departure {ago(status?.aviation.departures.newest ?? null)}</td>
             </tr>
+            <tr>
+              <th>Airspace over CBRN sites</th>
+              <td>{num.format(status?.aircraft.regions ?? 0)} regions</td>
+              <td>5-minute samples</td>
+              <td>sampled {ago(status?.aircraft.newestSample ?? null)}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="fine">
+          Positions come from ADS-B Exchange, which does not honour requests to hide an aircraft. We publish counts and
+          alerts, never one aircraft's movements.
+        </p>
+      </section>
+
+      <section>
+        <h2>Radiation</h2>
+        <table>
+          <tbody>
+            {(radiation?.networks ?? []).map((network) => (
+              <tr key={network.source}>
+                <th>{NETWORK_NAMES[network.source] ?? network.source}</th>
+                <td>{num.format(network.stations)} gamma monitors</td>
+                <td>hourly</td>
+                <td>last reading {ago(network.newestReading)}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </section>
@@ -167,6 +207,19 @@ export default function DetectorPage() {
             Per station, 30-day baseline, minimum 48 hourly samples. A station departs at 3× its median and +0.5
             µSv/h, or at 5 µSv/h outright. A single station never exceeds the operator surface. The public tiers need
             coherence: 3 stations within 50 km for elevated, 5 for high, 15 or any station at 10 µSv/h for critical.
+            EPA RadNet has one monitor per city, so it asks agreement of time instead of space: one departing hour is
+            elevated, a second consecutive hour or a second monitor is high, 10 µSv/h while confirmed is critical. In
+            1.59 million monitor-hours since January 2025 no RadNet monitor met the station threshold once; the highest
+            hour was 0.32 µSv/h. EPA publishes only hours it has approved, so silence from RadNet is not an all-clear.
+          </dd>
+          <dt>Underground detonation</dt>
+          <dd>
+            Every USGS seismic event. One the agency types as a nuclear explosion is critical. Within the listed radius
+            of a known test site, magnitude 3.5 or more is high when it is typed an explosion or is shallower than
+            5 km; when USGS could not constrain the depth it is high at a seismically quiet site and elevated at an
+            active one. Anywhere else, an event typed an explosion at magnitude 4 or more is elevated. The record: all
+            six North Korean tests are catalogued this way; natural earthquakes near the listed sites run at about one
+            a year, one of them shallow. This rule cannot see an atmospheric burst or a test at an unlisted site.
           </dd>
           <dt>Air traffic over a region</dt>
           <dd>
@@ -211,6 +264,18 @@ export default function DetectorPage() {
           Two instruments agreeing on the same place and time is a third rule: the top severity requires agreement
           between independent instruments, and a single instrument is reported one tier lower.
         </p>
+        <p>
+          Each tier has a false-alarm budget, and thresholds are set from the measured record to meet it: elevated at
+          most twelve times a year, high four, critical one. An instrument that stops reporting raises its own alert.
+          A quiet page means nothing crossed a threshold. It never means nothing happened.
+        </p>
+        <p>
+          Every rule on this page is code you can read:{' '}
+          <a href={`${SOURCE}/scripts/detect_cbrn_radiation.js`}>radiation</a>,{' '}
+          <a href={`${SOURCE}/server/detonation-rule.js`}>detonation</a>,{' '}
+          <a href={`${SOURCE}/scripts/detect_alert_events.js`}>aviation</a>,{' '}
+          <a href={`${SOURCE}/CBRN-WATCH.md`}>the full method and its limits</a>.
+        </p>
       </section>
 
       <section>
@@ -245,14 +310,6 @@ export default function DetectorPage() {
         </table>
       </section>
 
-      <section>
-        <h2>Subscribe</h2>
-        <p>
-          Push: in the <a href="https://ntfy.sh/">ntfy</a> app, subscribe to{' '}
-          <code id="topic">https://ntfy.warning.watch/warning-watch-alerts</code>. Feed:{' '}
-          <a href="/rss.xml">/rss.xml</a>. Alerts publish to both at elevated and above.
-        </p>
-      </section>
     </main>
   );
 }

@@ -140,8 +140,8 @@ async function assertLocalDispatchSkipsRawTakeoffTelemetry() {
     EWS_PUBLIC_URL: 'https://alerts.example.test/',
     NOTIFICATION_HASH_SECRET: 'smoke-hash-secret',
     NOTIFICATION_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
-    SENDGRID_API_KEY: 'smoke-sendgrid-key',
-    SENDGRID_FROM_EMAIL: 'alerts@example.test',
+    POSTMARK_SERVER_TOKEN: 'smoke-postmark-token',
+    POSTMARK_FROM_EMAIL: 'alerts@example.test',
   };
   upsertSubscriber(db, { email: 'fanout@example.test', wantsEmail: true }, env);
   // Double opt-in: dispatch only reaches confirmed channels; this stage tests
@@ -753,10 +753,8 @@ async function main() {
     INTERNAL_ALERT_TOKEN: token,
     NOTIFICATION_HASH_SECRET: 'smoke-hash-secret',
     NOTIFICATION_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
-    SENDGRID_API_KEY: 'smoke-sendgrid-key',
-    SENDGRID_FROM_EMAIL: 'alerts@example.test',
-    SENDGRID_WEBHOOK_PUBLIC_KEY: 'smoke-sendgrid-webhook-public-key',
-    SENDGRID_WEBHOOK_URL: 'https://alerts.example.test/api/sendgrid/webhook',
+    POSTMARK_SERVER_TOKEN: 'smoke-postmark-token',
+    POSTMARK_FROM_EMAIL: 'alerts@example.test',
     TELNYX_API_KEY: 'smoke-telnyx-key',
     TELNYX_NUMBER: '+14155552671',
     TELNYX_PUBLIC_KEY: 'smoke-telnyx-public-key',
@@ -861,9 +859,7 @@ async function main() {
     assert(authorized.payload.localDispatch.activeSubscriberCount === 2, 'Pipeline status did not count the active email and push subscribers.');
     assert(authorized.payload.feeds.eventSignals.itemCount === 1, 'Pipeline status did not summarize event signal records.');
     assert(authorized.payload.bridge.reason === 'smoke_seed', 'Pipeline status did not surface bridge health.');
-    assert(authorized.payload.providerConfig.sendgridConfigured === true, 'Pipeline status did not report SendGrid as configured.');
-    assert(authorized.payload.providerConfig.sendgridWebhookVerificationConfigured === true, 'Pipeline status did not report SendGrid webhook verification as configured.');
-    assert(authorized.payload.providerConfig.sendgridDeliveryStatusConfigured === true, 'Pipeline status did not report SendGrid delivery status as configured.');
+    assert(authorized.payload.providerConfig.emailConfigured === true, 'Pipeline status did not report email as configured.');
     assert(authorized.payload.providerConfig.telnyxConfigured === true, 'Pipeline status did not report Telnyx as configured.');
     assert(authorized.payload.providerConfig.telegramEmergencyConfigured === true, 'Pipeline status did not report emergency Telegram as configured from TELEGRAM_CHANNEL.');
     assert(authorized.payload.providerConfig.webPushConfigured === true, 'Pipeline status did not report browser push as configured.');

@@ -54,3 +54,23 @@
   .detector th, .detector td { display: block; padding: 2px 0; border: 0; }
   .detector tr { display: block; padding: 10px 0; border-bottom: 1px solid var(--line); }
 }
+
+.detector h1 a { color: inherit; text-decoration: none; }
+.detector .fine { color: var(--muted); font-size: 13px; }
+.detector .subscribe { margin: 0 0 8px; padding: 20px 22px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfc; }
+.detector .subscribe h2 { margin-top: 0; }
+.detector .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px; }
+.detector .tabs button { font: inherit; font-size: 13px; font-weight: 600; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--ink); cursor: pointer; }
+.detector .tabs button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.detector .pane p:last-child { margin-bottom: 0; }
+.detector .copyrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.detector .copyrow code { font-size: 14px; padding: 7px 10px; flex: 1 1 auto; }
+.detector .copyrow input { font: inherit; flex: 1 1 220px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); }
+.detector button { font: inherit; font-size: 14px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); cursor: pointer; }
+.detector .action, .detector a.action { display: inline-block; padding: 8px 14px; border-radius: 6px; background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; text-decoration: none; }
+.detector button:disabled { opacity: .5; cursor: default; }
+.detector .consent { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+.detector .consent input { margin-top: 3px; }
+.detector .note { margin-top: 14px; padding: 10px 12px; border-radius: 6px; font-size: 14px; }
+.detector .note.ok { background: #eaf5ee; color: #1f6b3a; }
+.detector .note.err { background: #fbeeee; color: var(--alert); }

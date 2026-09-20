@@ -857,7 +857,7 @@ The reference standards above remain a control map, not a certification claim.
 | **ntfy ops watchdog** | **live, self-hosted** — subscribe to `https://ntfy.warning.watch/warning-watch-ops`; unhealthy verdicts and recoveries only | nothing |
 | Owner push (xmsg → iMessage/email/desktop by severity) | retired with the laptop deployment (xmsg is Mac-only; `notify_local_push.js` silently no-ops on the box) | a box-reachable owner channel, if ever wanted |
 | Telegram channel | token wired (@XyraClawdBot, reused from xyra_claw — sends don't conflict with its polling) | one 45-second phone step: create channel, add bot as admin, set `TELEGRAM_CHANNEL` in `.env` |
-| Email (SendGrid) | code ready, **double opt-in enforced** (signup sends a confirm link; only confirmed addresses are ever alerted; without `SENDGRID_API_KEY` the confirm path is logged to the journal instead) | production deploy (below) |
+| Email (Postmark) | code ready, **double opt-in enforced** (signup sends a confirm link; only confirmed addresses are ever alerted; without `POSTMARK_SERVER_TOKEN` the sign-up route refuses the channel and the page does not offer it; the journal instead) | production deploy (below) |
 | SMS (Telnyx) | code ready, **double opt-in enforced** (same as email; without `TELNYX_API_KEY` the confirm path is logged) | production deploy (below) |
 | Browser push (VAPID) | keys generated in `.env` | production deploy (below) |
 | Paid signup (Stripe) | code ready | production deploy (below) |
@@ -870,8 +870,8 @@ Everything generable is already configured on the box (VAPID keypair,
 The irreducible credentials — add to `/etc/warning-watch.env` when the
 provider accounts exist, then `systemctl restart warning-watch.service`:
 
-1. `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL` (email; `SENDGRID_WEBHOOK_PUBLIC_KEY`
-   for delivery-status callbacks)
+1. `POSTMARK_SERVER_TOKEN`, `POSTMARK_FROM_EMAIL` (email; a Postmark server
+   named `warning-watch` with the `warning.watch` sender domain verified)
 2. `TELNYX_API_KEY`, `TELNYX_PUBLIC_KEY`, `TELNYX_NUMBER` (SMS — deferred per
    ROADMAP §3; A2P compliance is the cost, not the vendor)
 

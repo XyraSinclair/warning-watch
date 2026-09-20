@@ -25,6 +25,7 @@ const {
   countActiveSubscribers,
   getVapidPublicKey,
   isWebPushConfigured,
+  channelAvailability,
   getManagedSubscriber,
   listAlertEvents,
   listTakeoffEvents,
@@ -149,10 +150,6 @@ function hasHttpsEnv(name) {
 
 function hasTelnyxDeliveryStatusPath() {
   return hasHttpsEnv("TELNYX_WEBHOOK_URL") || hasHttpsEnv("APP_BASE_URL") || hasHttpsEnv("EWS_PUBLIC_URL");
-}
-
-function hasSendGridDeliveryStatusPath() {
-  return hasHttpsEnv("SENDGRID_WEBHOOK_URL") || hasHttpsEnv("APP_BASE_URL") || hasHttpsEnv("EWS_PUBLIC_URL");
 }
 
 function hasBase64EncodedBytes(value, byteLength) {
@@ -347,15 +344,12 @@ app.get("/api/admin/local-pipeline-status", (request, response) => {
     publicUrlConfigured: Boolean(cleanPublicUrl(process.env.APP_BASE_URL) || cleanPublicUrl(process.env.EWS_PUBLIC_URL)),
     notificationCryptoConfigured,
     providerConfig: {
-      sendgridConfigured: hasEnv("SENDGRID_API_KEY") && hasEnv("SENDGRID_FROM_EMAIL"),
-      sendgridWebhookVerificationConfigured: hasEnv("SENDGRID_WEBHOOK_PUBLIC_KEY"),
-      sendgridDeliveryStatusConfigured: hasEnv("SENDGRID_WEBHOOK_PUBLIC_KEY") && hasSendGridDeliveryStatusPath(),
+      emailConfigured: channelAvailability(process.env).email,
       telnyxConfigured:
         hasEnv("TELNYX_API_KEY") &&
         (hasEnv("TELNYX_NUMBER") || hasEnv("TELNYX_FROM_PHONE") || hasEnv("TELNYX_MESSAGING_PROFILE_ID")),
       telnyxWebhookVerificationConfigured: hasEnv("TELNYX_PUBLIC_KEY"),
       telnyxDeliveryStatusConfigured: hasEnv("TELNYX_PUBLIC_KEY") && hasTelnyxDeliveryStatusPath(),
-      stripeConfigured: hasEnv("STRIPE_SECRET_KEY") && hasEnv("STRIPE_PRICE_ID"),
       telegramEmergencyConfigured: hasEnv("TELEGRAM_BOT_TOKEN") && hasEnv("TELEGRAM_CHANNEL"),
       webPushConfigured: isWebPushConfigured(process.env),
     },
@@ -410,7 +404,7 @@ app.get("/api/event-signals", (_request, response) => {
 });
 
 mountWatchRoutes(app, { getDb: () => watchDb, requireInternalAuth });
-mountStatusRoutes(app, { getDbPath: () => DB_PATH });
+mountStatusRoutes(app, { getDbPath: () => DB_PATH, getChannels: () => channelAvailability(process.env) });
 
 // In-process fixed-window rate limiter for the public write endpoints. The
 // server sits behind the Cloudflare tunnel, so the socket address is always
@@ -447,6 +441,13 @@ const pushLimiter = rateLimit("push", 30, 60 * 60 * 1000);
 
 app.post("/api/notifications/signup", signupLimiter, async (request, response) => {
   const db = getDb();
+  const open = channelAvailability(process.env);
+  const asked = { email: Boolean(request.body?.email), sms: Boolean(request.body?.phone) };
+  const closed = Object.keys(asked).filter((channel) => asked[channel] && !open[channel]);
+  if (closed.length) {
+    response.status(503).json({ error: `${closed.map((channel) => (channel === "sms" ? "Text" : "Email")).join(" and ")} alerts are not open yet. The ntfy topic and the feed deliver now.` });
+    return;
+  }
   const subscriber = upsertSubscriber(db, request.body, process.env);
   const confirmations = await sendPendingConfirmations(db, process.env, subscriber.id);
   response.json({

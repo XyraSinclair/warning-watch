@@ -95,7 +95,7 @@ async function main() {
   });
 
   await check('email_channel', async () => {
-    if (!String(process.env.SENDGRID_API_KEY || '').trim()) return { skipped: 'provider not configured' };
+    if (!String(process.env.POSTMARK_SERVER_TOKEN || '').trim()) return { skipped: 'provider not configured' };
     return { skipped: 'provider configured, but no live-send canary exists yet: delivery is unproven' };
   });
 

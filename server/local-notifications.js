@@ -727,26 +727,39 @@ async function mapWithConcurrency(items, concurrency, worker) {
   return results;
 }
 
+// Which channels can deliver right now. The page offers only these, and the
+// sign-up route refuses the rest: an address is never taken for a channel that
+// cannot send its confirmation.
+function channelAvailability(env) {
+  const has = (key) => Boolean(String(env[key] || '').trim());
+  return {
+    email: has('POSTMARK_SERVER_TOKEN') && has('POSTMARK_FROM_EMAIL'),
+    sms: has('TELNYX_API_KEY') && has('TELNYX_NUMBER'),
+    push: isWebPushConfigured(env),
+  };
+}
+
 async function sendEmail(env, { to, subject, text }) {
-  const apiKey = requireEnv(env, 'SENDGRID_API_KEY');
-  const fromEmail = requireEnv(env, 'SENDGRID_FROM_EMAIL');
-  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+  const response = await fetch('https://api.postmarkapp.com/email', {
     method: 'POST',
     headers: {
-      authorization: `Bearer ${apiKey}`,
+      accept: 'application/json',
       'content-type': 'application/json',
+      'x-postmark-server-token': requireEnv(env, 'POSTMARK_SERVER_TOKEN'),
     },
     body: JSON.stringify({
-      personalizations: [{ to: [{ email: to }], subject }],
-      from: { email: fromEmail, name: String(env.SENDGRID_FROM_NAME || 'Warning Watch') },
-      content: [{ type: 'text/plain', value: text }],
+      From: `Warning Watch <${requireEnv(env, 'POSTMARK_FROM_EMAIL')}>`,
+      To: to,
+      Subject: subject,
+      TextBody: text,
+      MessageStream: String(env.POSTMARK_MESSAGE_STREAM || 'outbound'),
     }),
   });
-  const responseText = await response.text();
+  const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(responseText || `SendGrid request failed with ${response.status}`);
+    throw new Error(payload.Message || `Postmark request failed with ${response.status}`);
   }
-  return { providerMessageId: response.headers.get('x-message-id') || null };
+  return { providerMessageId: payload.MessageID || null };
 }
 
 async function sendSms(env, { to, text }) {
@@ -1104,6 +1117,7 @@ module.exports = {
   getActiveSubscriberBatch,
   getVapidPublicKey,
   isWebPushConfigured,
+  channelAvailability,
   getManagedSubscriber,
   listAlertEvents,
   listTakeoffEvents,

@@ -92,7 +92,7 @@ function readCbrnAircraft(db) {
 function readAviation(db) {
   const empty = {
     aircraft: { tracked: 0, newestFix: null, ageMinutes: null },
-    behaviour: { turnaroundes24h: 0, hoursRecorded: 0, hourlySamples: 0, armed: false, oldestHour: null },
+    behaviour: { turnarounds24h: 0, hoursRecorded: 0, hourlySamples: 0, armed: false, oldestHour: null },
     departures: { records: 0, days: 0, newest: null, ageMinutes: null },
   };
   if (!db) return empty;
@@ -128,6 +128,33 @@ function readAviation(db) {
   }
 }
 
+// The three aircraft cohorts, each its own database: how many airframes are on
+// the roster and how many were airborne at the newest sample. Aircraft that
+// broadcast no registered address have no roster; they are counted, not named.
+const COHORTS = [
+  ["business", "Business jets", "EWS_DB_PATH", "ews-main.sqlite"],
+  ["military", "Military aircraft", "EWS_MILITARY_DB_PATH", "ews-military.sqlite"],
+  ["unregistered", "Aircraft broadcasting no registered address", "EWS_UNTRACKED_DB_PATH", "ews-untracked.sqlite"],
+];
+
+function readCohorts() {
+  return COHORTS.map(([key, label, envKey, file]) => {
+    const db = open(resolveDb(envKey) || path.join(DATA_DIR, file));
+    const empty = { key, label, roster: 0, airborne: null, sampledAt: null, ageMinutes: null, samples: 0 };
+    if (!db) return empty;
+    try {
+      const roster = db.prepare("SELECT COUNT(*) AS n FROM tracked_aircraft").get();
+      const latest = db.prepare("SELECT sampled_at AS sampledAt, concurrent_count AS airborne FROM concurrent_metrics ORDER BY sampled_at DESC LIMIT 1").get();
+      const samples = db.prepare("SELECT COUNT(*) AS n FROM concurrent_metrics").get();
+      return { key, label, roster: roster?.n ?? 0, airborne: latest?.airborne ?? null, sampledAt: latest?.sampledAt ?? null, ageMinutes: minutesSince(latest?.sampledAt), samples: samples?.n ?? 0 };
+    } catch {
+      return empty;
+    } finally {
+      db.close();
+    }
+  });
+}
+
 function getStatusSummary(mainDbPath) {
   const mainPath = mainDbPath || resolveDb("EWS_DB_PATH") || path.join(DATA_DIR, "ews-main.sqlite");
   const cbrnPath = resolveDb("EWS_CBRN_DB_PATH") || path.join(DATA_DIR, "ews-cbrn.sqlite");
@@ -140,6 +167,7 @@ function getStatusSummary(mainDbPath) {
       radiation: readRadiation(cbrn),
       aircraft: readCbrnAircraft(cbrn),
       aviation: readAviation(main),
+      cohorts: readCohorts(),
     };
   } finally {
     cbrn?.close();
@@ -147,12 +175,12 @@ function getStatusSummary(mainDbPath) {
   }
 }
 
-function mountStatusRoutes(app, { getDbPath } = {}) {
+function mountStatusRoutes(app, { getDbPath, getChannels } = {}) {
   app.get("/api/status", (_request, response) => {
     response.set("Cache-Control", "no-store");
     response.set("X-Content-Type-Options", "nosniff");
     try {
-      response.json(getStatusSummary(typeof getDbPath === "function" ? getDbPath() : null));
+      response.json({ ...getStatusSummary(typeof getDbPath === "function" ? getDbPath() : null), channels: getChannels() });
     } catch (error) {
       console.error("Status API failed:", error.code || error.name || "Error");
       response.status(500).json({ error: "Status could not be read." });
