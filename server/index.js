@@ -493,7 +493,7 @@ for (const [routePath, fileName] of PUBLISHED_DASHBOARD_FILES) {
 
 app.get(["/rss.xml", "/feed.xml"], (_request, response) => {
   const items = dedupeRssItems([
-    ...listAlertEvents(getDb(), { limit: 100 }).map((event) => rssItemFromAlertEvent(event)),
+    ...listAlertEvents(getDb(), { limit: 100, publicOnly: true }).map((event) => rssItemFromAlertEvent(event)),
     ...getRssItems(),
   ]);
   response

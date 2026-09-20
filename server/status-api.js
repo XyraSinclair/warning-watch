@@ -3,11 +3,11 @@ const path = require("node:path");
 const Database = require("better-sqlite3");
 
 const { DATA_DIR } = require("./config");
+const { PUBLIC_EVENT_SQL } = require("./publication");
 
 // One read for the single public page: what the instruments are measuring right
 // now, which baselines are armed, and every alert that has been raised. Public
 // severities only — `watch` stays on the operator surface.
-const PUBLIC_SEVERITIES = ["elevated", "high", "critical"];
 const MAX_ALERTS = 40;
 const MIN_ARMING_SAMPLES = 10;
 
@@ -34,17 +34,15 @@ function minutesSince(value) {
 function readAlerts(db) {
   if (!db) return [];
   try {
-    const placeholders = PUBLIC_SEVERITIES.map(() => "?").join(", ");
     // A retracted alert was raised under a threshold the instrument has since
     // recalibrated. It stays in the record with its delivery state intact, and
     // leaves the public feed.
     return db.prepare(
       `SELECT kind, severity, cohort, occurred_at AS occurredAt, title, message
          FROM alert_events
-        WHERE severity IN (${placeholders})
-          AND json_extract(payload_json, '$.retracted') IS NULL
+        WHERE ${PUBLIC_EVENT_SQL}
         ORDER BY occurred_at DESC, id DESC LIMIT ?`,
-    ).all(...PUBLIC_SEVERITIES, MAX_ALERTS);
+    ).all(MAX_ALERTS);
   } catch {
     return [];
   }

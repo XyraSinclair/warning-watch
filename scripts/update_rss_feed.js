@@ -57,7 +57,7 @@ function main() {
     dryRun: args.dryRun,
   });
   const items = dedupeRssItems([
-    ...listAlertEvents(getDb(), { limit: 100 }).map((event) => rssItemFromAlertEvent(event)),
+    ...listAlertEvents(getDb(), { limit: 100, publicOnly: true }).map((event) => rssItemFromAlertEvent(event)),
     ...(result.updated && result.item && args.dryRun ? [result.item] : []),
     ...getRssItems(),
   ]);

@@ -164,7 +164,7 @@ async function main() {
 
   if (!topic) {
     console.log(JSON.stringify({ ok: true, skipped: true, reason: 'missing_EWS_NTFY_OPS_TOPIC', healthy, problems }));
-    process.exit(healthy ? 0 : 1);
+    return;
   }
 
   // Publish before writing state: a page that failed to send is retried on
@@ -172,8 +172,9 @@ async function main() {
   const { state, page } = decide(readState(), problems, Date.now());
   if (page) await publish(page.title, page.body, page.priority);
   writeState(state);
+  // Exit 0: the watchdog ran and reported. The unit fails only when the
+  // watchdog itself broke, so a working watchdog never looks like a dead one.
   console.log(JSON.stringify({ ok: true, healthy, ...(page ? { sent: page.kind, priority: page.priority } : {}), problems }));
-  process.exit(healthy ? 0 : 1);
 }
 
 if (require.main === module) {

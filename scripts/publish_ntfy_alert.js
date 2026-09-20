@@ -5,17 +5,16 @@
 // no accounts, no tokens. Cursor lives in the meta table so each event
 // publishes exactly once. No-ops when EWS_NTFY_TOPIC is unset.
 //
-// Publishing threshold: elevated and above. watch-level events are ambient
-// and stay on the dashboard/RSS only.
+// What publishes is what server/publication.js calls public.
 
 const path = require('node:path');
 const Database = require('better-sqlite3');
 const { loadEnvFile } = require('../server/env');
+const { PUBLIC_EVENT_SQL } = require('../server/publication');
 
 loadEnvFile();
 
 const CURSOR_KEY = 'ntfy_last_alert_id';
-const PUBLISHED_SEVERITIES = new Set(['elevated', 'high', 'critical']);
 
 const PRIORITY_BY_SEVERITY = {
   elevated: 'default',
@@ -94,12 +93,12 @@ async function main() {
     }
 
     const events = db
-      .prepare('SELECT id, severity, cohort, title, message, occurred_at FROM alert_events WHERE id > ? ORDER BY id ASC LIMIT ?')
+      .prepare(`SELECT id, kind, severity, cohort, title, message, occurred_at, ${PUBLIC_EVENT_SQL} AS is_public FROM alert_events WHERE id > ? ORDER BY id ASC LIMIT ?`)
       .all(cursor, args.limit);
 
     let published = 0;
     for (const event of events) {
-      if (PUBLISHED_SEVERITIES.has(event.severity)) {
+      if (event.is_public) {
         const ok = await publish(args.server, args.topic, event, args.dryRun);
         if (!ok) break; // Cursor stays put; event retries next pass.
         published += 1;

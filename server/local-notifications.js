@@ -8,24 +8,13 @@ const {
   normalizePushSubscriptionPayload,
   sendWebPush,
 } = require('./web-push');
+const { PUBLIC_EVENT_SQL } = require('./publication');
 
 const ALERT_DISPATCH_LIMIT = 25;
 const EMAIL_CONCURRENCY = 8;
 const SMS_MIN_INTERVAL_MS = 250;
-const ALERTABLE_EVENT_KINDS = ['statistical_anomaly', 'takeoff_anomaly', 'takeoff_rate_anomaly',
-  // Course-behaviour clusters: these kinds only ever emit at elevated and
-  // above, so the kind itself is the gate. The per-aircraft `flight_turnaround`
-  // kind is deliberately absent — a single aircraft turning is operator-only.
-  'flight_turnaround_cluster', 'takeoff_origin_cluster'];
-// CBRN events share one cohort across both operator-only (`watch`) and public
-// severities, so kind alone cannot decide delivery: the severity condition is
-// what keeps thirty routine notices on the operator surface instead of in a
-// subscriber's inbox. Aviation kinds emit `watch` too (takeoff_rate_anomaly
-// since 14 Sept), so one severity gate covers every kind: `watch` never leaves
-// the operator surface, as on the ntfy rail.
-const CBRN_ALERTABLE_KINDS = ['cbrn_radiation_anomaly', 'cbrn_airspace_void', 'cbrn_aircraft_emergency', 'cbrn_special_aircraft', 'cbrn_lexical_burst', 'cbrn_official_notice', 'cbrn_seismic_event', 'cbrn_fused'];
-const DELIVERABLE_KINDS = [...ALERTABLE_EVENT_KINDS, ...CBRN_ALERTABLE_KINDS];
-const DELIVERABLE_CONDITION = `(kind IN (${DELIVERABLE_KINDS.map(() => '?').join(', ')}) AND severity <> 'watch')`;
+// What reaches a subscriber is what is public, decided in one place.
+const DELIVERABLE_CONDITION = PUBLIC_EVENT_SQL;
 
 
 class HttpError extends Error {
@@ -657,11 +646,12 @@ function getActiveSubscribers(db, env = process.env) {
   }
 }
 
-function listAlertEvents(db, { limit = 50 } = {}) {
+function listAlertEvents(db, { limit = 50, publicOnly = false } = {}) {
   return db
     .prepare(`
       SELECT id, kind, severity, cohort, event_key AS eventKey, occurred_at AS occurredAt, title, message, payload_json AS payloadJson, status, created_at AS createdAt, dispatched_at AS dispatchedAt, dispatch_summary_json AS dispatchSummaryJson
       FROM alert_events
+      ${publicOnly ? `WHERE ${PUBLIC_EVENT_SQL}` : ''}
       ORDER BY occurred_at DESC, id DESC
       LIMIT ?
     `)
@@ -986,7 +976,7 @@ async function dispatchPendingAlerts(db, env = process.env, { limit = ALERT_DISP
     SET status = 'observed'
     WHERE status IN ('pending', 'failed', 'partial')
       AND NOT ${DELIVERABLE_CONDITION}
-  `).run(...DELIVERABLE_KINDS);
+  `).run();
 
   const maxAlerts = Math.min(Math.max(Number(limit) || ALERT_DISPATCH_LIMIT, 1), 100);
   const staleProcessingMs = Math.max(Number(env.ALERT_PROCESSING_STALE_MS || 30 * 60 * 1000), 60 * 1000);
@@ -1007,7 +997,7 @@ async function dispatchPendingAlerts(db, env = process.env, { limit = ALERT_DISP
       ORDER BY occurred_at ASC, id ASC
       LIMIT ?
     `)
-    .all(staleProcessingBeforeEpoch, ...DELIVERABLE_KINDS, maxAlerts);
+    .all(staleProcessingBeforeEpoch, maxAlerts);
   const claimAlert = db.prepare(`
     UPDATE alert_events
     SET status = 'processing',
@@ -1025,7 +1015,7 @@ async function dispatchPendingAlerts(db, env = process.env, { limit = ALERT_DISP
   const alerts = [];
   for (const candidate of candidates) {
     const processingLeaseStamp = new Date().toISOString();
-    const claim = claimAlert.run(processingLeaseStamp, candidate.id, ...DELIVERABLE_KINDS, staleProcessingBeforeEpoch);
+    const claim = claimAlert.run(processingLeaseStamp, candidate.id, staleProcessingBeforeEpoch);
     if (claim.changes === 1) {
       alerts.push({ ...candidate, status: 'processing', processingLeaseStamp });
     }

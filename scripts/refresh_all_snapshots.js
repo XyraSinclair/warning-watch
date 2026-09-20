@@ -378,8 +378,9 @@ try {
 }
 // Even failed acquisition must not strand previously queued deliveries.
 runStage('flight-behaviour', detectFlightBehaviour);
-runStage('signal-corroboration', enforceSignalCorroboration);
-updateAlerts();
+// The gate fails closed: if corroboration could not run, nothing is delivered
+// this pass. The failed stage already fails the run, and the next pass retries.
+if (runStage('signal-corroboration', enforceSignalCorroboration)) updateAlerts();
 runStage('operations-feed', exportOperationsFeed);
 runStage('event-signals-feed', exportEventSignalsFeed);
 state.finishedAt = new Date().toISOString();

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Database = require('better-sqlite3');
 
-const BRIDGED_ALERT_KINDS = ['statistical_anomaly', 'takeoff_anomaly', 'takeoff_rate_anomaly'];
+const { PUBLIC_EVENT_SQL } = require('../server/publication');
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -82,17 +82,13 @@ function listAlertEvents(db, limit) {
         dispatched_at AS dispatchedAt,
         bridged_at AS bridgedAt
       FROM alert_events
-      WHERE kind IN ('statistical_anomaly', 'takeoff_anomaly', 'takeoff_rate_anomaly')
-        AND status <> 'observed'
+      WHERE ${PUBLIC_EVENT_SQL}
         AND bridged_at IS NULL
       ORDER BY occurred_at ASC, id ASC
       LIMIT ?
     `)
     .all(limit)
     .map((event) => {
-      if (!BRIDGED_ALERT_KINDS.includes(event.kind)) {
-        throw new Error(`Unexpected bridged alert kind after SQL filtering: ${event.kind}`);
-      }
       return {
         ...event,
         payload: JSON.parse(event.payloadJson),

@@ -150,7 +150,7 @@ function buildEmergencyRssFeedXml({ items = getRssItems(), env = process.env } =
   <channel>
     <title>warning.watch</title>
     <link>${escapeXml(config.siteUrl)}</link>
-    <description>CBRN alerts from warning.watch, published at elevated severity and above.</description>
+    <description>Alerts from warning.watch, published at elevated severity and above.</description>
     <language>en-us</language>
     <lastBuildDate>${escapeXml(lastBuildDate)}</lastBuildDate>
     <ttl>30</ttl>
