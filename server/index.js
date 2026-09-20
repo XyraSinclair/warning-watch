@@ -305,9 +305,7 @@ app.get("/api/admin/local-pipeline-status", (request, response) => {
     notificationCryptoConfigured,
     providerConfig: {
       emailConfigured: channelAvailability(process.env).email,
-      telnyxConfigured:
-        hasEnv("TELNYX_API_KEY") &&
-        (hasEnv("TELNYX_NUMBER") || hasEnv("TELNYX_FROM_PHONE") || hasEnv("TELNYX_MESSAGING_PROFILE_ID")),
+      telnyxConfigured: channelAvailability(process.env).sms,
       telnyxWebhookVerificationConfigured: hasEnv("TELNYX_PUBLIC_KEY"),
       telnyxDeliveryStatusConfigured: hasEnv("TELNYX_PUBLIC_KEY") && hasTelnyxDeliveryStatusPath(),
       telegramEmergencyConfigured: hasEnv("TELEGRAM_BOT_TOKEN") && hasEnv("TELEGRAM_CHANNEL"),

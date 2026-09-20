@@ -114,7 +114,7 @@ implemented is measurement, baseline and disclosure, not foresight.
 | RSS | `<deployment>/rss.xml` in any feed reader |
 | Telegram | join the deployment's channel |
 | Browser push | the front page's sign-up panel |
-| Email / SMS | the same panel, once the deployment sets a Postmark or Telnyx credential |
+| Email / SMS | the same panel, once the deployment sets its Postmark token and sender, or its Telnyx key and number |
 
 ## Operations
 

@@ -206,7 +206,8 @@ export default function DetectorPage() {
           <dd>
             Per station, 30-day baseline, minimum 48 hourly samples. A station departs at 3× its median and +0.5
             µSv/h, or at 5 µSv/h outright. A single station never exceeds the operator surface. The public tiers need
-            coherence: 3 stations within 50 km for elevated, 5 for high, 15 or any station at 10 µSv/h for critical.
+            coherence: every station in the group at a robust score of 5 or more, under at least two station names,
+            with 3 stations within 50 km for elevated, 5 for high, 15 or any station at 10 µSv/h for critical.
             EPA RadNet has one monitor per city, so it asks agreement of time instead of space: one departing hour is
             elevated, a second consecutive hour or a second monitor is high, 10 µSv/h while confirmed is critical. In
             1.59 million monitor-hours since January 2025 no RadNet monitor met the station threshold once; the highest
@@ -218,25 +219,29 @@ export default function DetectorPage() {
             of a known test site, magnitude 3.5 or more is high when it is typed an explosion or is shallower than
             5 km; when USGS could not constrain the depth it is high at a seismically quiet site and elevated at an
             active one. Anywhere else, an event typed an explosion at magnitude 4 or more is elevated. The record: all
-            six North Korean tests are catalogued this way; natural earthquakes near the listed sites run at about one
-            a year, one of them shallow. This rule cannot see an atmospheric burst or a test at an unlisted site.
+            six North Korean tests are catalogued this way. Over 26.7 years natural earthquakes raised this rule nine
+            times, about one every three years: eight elevated, and one high, the aftershock the 2017 test itself
+            induced. This rule cannot see an atmospheric burst or a test at an unlisted site.
           </dd>
           <dt>Air traffic over a region</dt>
           <dd>
-            Per region, same-hour baseline over 21 days, minimum 10 samples. Void at 25 % of the median, or a score of
+            Per region, same-hour baseline over 21 days, minimum 10 samples and a median of at least 15 aircraft, so
+            a sky that is normally empty cannot go void. Void at 25 % of the median, or a score of
             −5. Elevated when a void holds at 10 % of the median for three consecutive samples. Both control regions
             must report, or the sample is discarded as a feed failure.
           </dd>
           <dt>Aircraft turnarounds</dt>
           <dd>
             A bearing change of 120° or more at 10,000 ft or above, with both legs at least 20 nm, so manoeuvring near
-            an airfield cannot qualify. A cluster needs 3 aircraft within 200 km of each other inside 60 minutes
-            against the same hour on the previous 21 days; 6 reaches high. One aircraft never leaves the operator
+            an airfield cannot qualify. A cluster needs 3 aircraft (5 in the military cohort) within
+            200 km of each other inside 60 minutes, and three times the median for the same hour on the previous 21
+            days, minimum 10 samples. Twice the floor, 6 or 10, reaches high. One aircraft never leaves the operator
             surface.
           </dd>
           <dt>Departure concentration</dt>
           <dd>
-            6 departures within 60 km of each other inside 60 minutes, against the same hour on the previous 21 days.
+            6 departures within 60 km of each other inside 60 minutes, and three times the median for the same
+            footprint at the same hour over at least 10 covered days. Twice that threshold reaches high.
           </dd>
           <dt>Takeoff volume</dt>
           <dd>
@@ -257,12 +262,15 @@ export default function DetectorPage() {
           <dt>Vocabulary</dt>
           <dd>
             Matched CBRN event words per place per hour against a 14-day same-hour baseline, minimum 10 samples.
-            Elevated at 6 matched terms across 3 posts; high at 25 across 8. Never critical on its own.
+            Elevated at 8 matched terms across 3 posts and three times the median; high at 25 across 8. Never
+            critical on its own.
           </dd>
         </dl>
         <p>
-          Two instruments agreeing on the same place and time is a third rule: the top severity requires agreement
-          between independent instruments, and a single instrument is reported one tier lower.
+          Agreement is its own rule. The three aircraft cohorts are three instruments: a critical from one of them
+          is reported as high, and says so, unless a second cohort is at elevated or above within 90 minutes.
+          Three things reach critical alone, because each is already a confirmation: radiation at 10 µSv/h once
+          stations or consecutive hours agree, a seismic event USGS types as a nuclear explosion, and an authority's own CAP warning.
         </p>
         <p>
           Each tier has a false-alarm budget, and thresholds are set from the measured record to meet it: elevated at
@@ -297,8 +305,8 @@ export default function DetectorPage() {
             <tr>
               <th>Departure cluster baseline</th>
               <td>{num.format(status?.aviation.departures.days ?? 0)} days of departures</td>
-              <td className={(status?.aviation.departures.days ?? 0) >= 21 ? 'ok' : 'warm'}>
-                {(status?.aviation.departures.days ?? 0) >= 21 ? 'armed' : 'warming'}
+              <td className={(status?.aviation.departures.days ?? 0) >= 10 ? 'ok' : 'warm'}>
+                {(status?.aviation.departures.days ?? 0) >= 10 ? 'armed' : 'warming'}
               </td>
             </tr>
             <tr>

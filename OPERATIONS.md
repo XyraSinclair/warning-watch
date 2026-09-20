@@ -93,7 +93,7 @@ xyra-dev-hetzner`):
 - Watch data: public `/api/watch` and `/api/watch/incidents/:id`
 - Official-source notices: `/api/watch/official`, optionally `?state=CA`; independent of the private incident publication gate
 - Aviation data: `/dashboard.json`, `/military-dashboard.json`, `/untracked-dashboard.json`
-- Operator watch: the on-page operator control uses the existing `INTERNAL_ALERT_TOKEN` for `/api/admin/watch`, incident detail, and review. The token is held only in page memory; refresh clears it.
+- Operator watch: `/api/admin/watch`, incident detail and review are token-gated by `INTERNAL_ALERT_TOKEN`; no page drives them.
 - **RSS feed**: <https://warning.watch/rss.xml> — fires on emergency-level changes and alert events
 - Ops/event feeds: `data/published/operations.json`, `event-signals.json`
 
@@ -251,7 +251,7 @@ stages, per-network station counts and reading ages, whether any network
 reported inside four hours, and consecutive collection failures (bound 6). The
 verdict treats "no gamma network reported within four hours" as a problem — a
 blind radiological instrument must never read as calm. The public picture is at
-<https://warning.watch/cbrn>, backed by `/api/status` (no auth, `no-store`,
+<https://warning.watch/>, backed by `/api/status` (no auth, `no-store`,
 public severities only).
 
 Coverage limits are operational facts, not caveats: gamma telemetry is the
@@ -857,7 +857,7 @@ The reference standards above remain a control map, not a certification claim.
 | Owner push (xmsg → iMessage/email/desktop by severity) | retired with the laptop deployment (xmsg is Mac-only; `notify_local_push.js` silently no-ops on the box) | a box-reachable owner channel, if ever wanted |
 | Telegram channel | token wired (@XyraClawdBot, reused from xyra_claw — sends don't conflict with its polling) | one 45-second phone step: create channel, add bot as admin, set `TELEGRAM_CHANNEL` in `.env` |
 | Email (Postmark) | **live since 20 September 2026** (Postmark server `warning-watch`, sender domain `warning.watch` with DKIM and Return-Path verified, From `alerts@warning.watch`; sign-up, delivery and confirm exercised end to end), **double opt-in enforced** (signup sends a confirm link; only confirmed addresses are ever alerted; without `POSTMARK_SERVER_TOKEN` the sign-up route refuses the channel and the page does not offer it) | nothing |
-| SMS (Telnyx) | code ready, **double opt-in enforced** (same as email; without `TELNYX_API_KEY` the confirm path is logged) | production deploy (below) |
+| SMS (Telnyx) | code ready, **double opt-in enforced** (same as email; without `TELNYX_API_KEY` and `TELNYX_NUMBER` the sign-up route refuses the channel and the page does not offer it) | a Telnyx account, number and US carrier registration |
 | Browser push (VAPID) | keys generated in `.env` | production deploy (below) |
 
 ## Activating email/SMS delivery

@@ -100,6 +100,10 @@ export function SubscribePanel({ channels }: { channels: Channels | null }) {
     }
     void run(async () => {
       const payload = await post('/api/notifications/signup', sms ? { phone: value, smsConsent: true } : { email: value });
+      const confirmations = Array.isArray(payload.confirmations) ? payload.confirmations : [];
+      if (confirmations.some((entry) => entry?.sent === false)) {
+        throw new Error('The confirmation could not be sent. Nothing is subscribed yet. Try again shortly.');
+      }
       return {
         tone: 'ok',
         text: sms
