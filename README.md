@@ -113,7 +113,8 @@ implemented is measurement, baseline and disclosure, not foresight.
 | ntfy push | install the [ntfy](https://ntfy.sh) app, subscribe to the deployment's topic |
 | RSS | `<deployment>/rss.xml` in any feed reader |
 | Telegram | join the deployment's channel |
-| Email / SMS / web push | via the deployment's signup page (optional paid stack) |
+| Browser push | the front page's sign-up panel |
+| Email / SMS | the same panel, once the deployment sets a Postmark or Telnyx credential |
 
 ## Operations
 

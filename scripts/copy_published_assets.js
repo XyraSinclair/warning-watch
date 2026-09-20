@@ -1,6 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { REPO_ROOT } = require("./_env");
+const REPO_ROOT = path.resolve(__dirname, "..");
 
 const REQUIRED_PUBLISHED_ASSETS = [
   "dashboard.json",

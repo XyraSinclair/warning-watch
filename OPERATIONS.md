@@ -81,10 +81,10 @@ confirmation and management links absolute.
 
 The public surface is **one page** at <https://warning.watch/>: current
 instruments, the alert feed, the detection thresholds, and which baselines are
-still warming. `/signup` and `/manage` remain routable because those links
-arrive by email; every other former page (watch, cbrn, aviation, plan,
-event-signals) is unrouted, and its component source is retained in the
-repository but is no longer served or bundled.
+still warming, with the sign-up panel at its head. `/manage` is the one other
+route, reached from a subscriber's own management link. Every former page
+(watch, cbrn, aviation, plan, event-signals, signup) and its component source
+was removed on 20 September 2026; git history holds it.
 
 Endpoints (public via the tunnel, or loopback via `ssh -L 3030:127.0.0.1:3030
 xyra-dev-hetzner`):
@@ -355,9 +355,8 @@ quoted source material, not verified events or machine findings.
 **Status: not served.** The household plan and its guidance surface are
 unrouted as of 11 September 2026 — the public site is one page of measurements
 and alerts. The analysis below is retained because it still describes how the
-plan's properties fail; the component source remains in the repository, and
-`/signup` and `/manage` still route for subscription links that arrive by
-email.
+plan's properties fail; the component source was removed on 20 September 2026
+and lives in git history.
 
 The resident product is a plan for receiving and acting on an official warning
 while continuing ordinary city life. Its useful unit is a household decision,
@@ -860,7 +859,6 @@ The reference standards above remain a control map, not a certification claim.
 | Email (Postmark) | code ready, **double opt-in enforced** (signup sends a confirm link; only confirmed addresses are ever alerted; without `POSTMARK_SERVER_TOKEN` the sign-up route refuses the channel and the page does not offer it) | production deploy (below) |
 | SMS (Telnyx) | code ready, **double opt-in enforced** (same as email; without `TELNYX_API_KEY` the confirm path is logged) | production deploy (below) |
 | Browser push (VAPID) | keys generated in `.env` | production deploy (below) |
-| Paid signup (Stripe) | code ready | production deploy (below) |
 
 ## Activating email/SMS delivery
 

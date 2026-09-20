@@ -1,7 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const Database = require("better-sqlite3");
 const express = require("express");
 const cors = require("cors");
 const { loadEnvFile } = require("./env");
@@ -13,7 +12,6 @@ const {
   getMetaValue,
   setMetaValue,
   upsertTrackedAircraft,
-  getTrackingSummary,
 } = require("./db");
 const { createHeatmapCacheRefresher } = require("./heatmap-cache");
 const { buildDashboardSnapshot } = require("./dashboard");
@@ -28,7 +26,6 @@ const {
   channelAvailability,
   getManagedSubscriber,
   listAlertEvents,
-  listTakeoffEvents,
   sendPendingConfirmations,
   upsertSubscriber,
   unsubscribePushSubscriber,
@@ -49,33 +46,10 @@ const app = express();
 const PORT = Number(process.env.PORT || 3030);
 const HOST = process.env.HOST || "127.0.0.1";
 const DASHBOARD_SNAPSHOT_META_KEY = "dashboard_snapshot_v1";
-const DASHBOARD_DB_PATHS = [
-  DB_PATH,
-  path.join(DATA_DIR, "ews-military.sqlite"),
-  path.join(DATA_DIR, "ews-untracked.sqlite"),
-];
 const PUBLISHED_DIR = process.env.EWS_PUBLISHED_DIR
   ? path.resolve(process.env.EWS_PUBLISHED_DIR)
   : path.join(DATA_DIR, "published");
 
-function readAcrossDashboardDbs(reader, sortKey, limit) {
-  const rows = [];
-  for (const dbPath of DASHBOARD_DB_PATHS) {
-    if (!fs.existsSync(dbPath)) {
-      continue;
-    }
-    const db = new Database(dbPath, { readonly: true, fileMustExist: true });
-    try {
-      rows.push(...reader(db, { limit }));
-    } finally {
-      db.close();
-    }
-  }
-
-  return rows
-    .sort((left, right) => String(right[sortKey] || "").localeCompare(String(left[sortKey] || "")))
-    .slice(0, limit);
-}
 const PUBLISHED_DASHBOARD_FILES = new Map([
   ["/dashboard.json", "dashboard.json"],
   ["/military-dashboard.json", "military-dashboard.json"],
@@ -202,20 +176,6 @@ function getAlertEventStatusCounts(db) {
 
 app.use(cors());
 app.use(express.json());
-
-app.use((request, response, next) => {
-  const legacyDashboardRoutes = ["/military", "/untracked"];
-  if (
-    legacyDashboardRoutes.some(
-      (routePath) => request.path === routePath || request.path.startsWith(`${routePath}/`),
-    )
-  ) {
-    response.redirect(301, "/");
-    return;
-  }
-
-  next();
-});
 
 function loadPersistedDashboardSnapshot() {
   const savedValue = getMetaValue(DASHBOARD_SNAPSHOT_META_KEY);
@@ -372,33 +332,6 @@ app.get("/api/admin/local-pipeline-status", (request, response) => {
   });
 });
 
-app.get("/api/watchlist", (_request, response) => {
-  const watchlist = readWatchlist();
-  response.json({
-    configured: watchlist.configured,
-    reason: watchlist.reason || null,
-    entries: watchlist.entries,
-  });
-});
-
-app.get("/api/cohort", (_request, response) => {
-  response.json(getTrackingSummary());
-});
-
-app.get("/api/takeoffs", (request, response) => {
-  const limit = Math.min(Math.max(Number(request.query.limit) || 100, 1), 500);
-  response.json({
-    events: readAcrossDashboardDbs(listTakeoffEvents, "observedAt", limit),
-  });
-});
-
-app.get("/api/alerts", (request, response) => {
-  const limit = Math.min(Math.max(Number(request.query.limit) || 50, 1), 200);
-  response.json({
-    events: listAlertEvents(getDb(), { limit }),
-  });
-});
-
 app.get("/api/event-signals", (_request, response) => {
   response.set("cache-control", "no-store").json(readPublishedJson("event-signals.json"));
 });
@@ -543,18 +476,6 @@ app.post("/api/manage/subscriber", (request, response) => {
     subscriber,
   });
 });
-app.get("/api/dashboard", (_request, response) => {
-  const snapshot = dashboardSnapshotManager.getSnapshot();
-  if (!snapshot) {
-    response.status(503).json({
-      error: "Dashboard snapshot is not ready yet.",
-    });
-    return;
-  }
-
-  response.set("Cache-Control", "no-store").json(snapshot);
-});
-
 for (const [routePath, fileName] of PUBLISHED_DASHBOARD_FILES) {
   app.get(routePath, (_request, response) => {
     const snapshotPath = path.join(PUBLISHED_DIR, fileName);

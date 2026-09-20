@@ -557,10 +557,6 @@ function mapManagedSubscriber(env, subscriber) {
     wantsEmail: Boolean(subscriber.email_enabled),
     wantsSms: Boolean(subscriber.sms_enabled),
     wantsPush: Boolean(subscriber.push_enabled),
-    currentPeriodEnd: null,
-    stripeCancelAtPeriodEnd: false,
-    hasStripeSubscription: false,
-    stripeBillingPortalUrl: null,
     managementPath: createSubscriberManagementPath(env, subscriber),
   };
 }

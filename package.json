@@ -35,8 +35,6 @@
     "cbrn:refresh": "node scripts/cbrn_refresh.js",
     "rss:update": "node scripts/update_rss_feed.js",
     "telegram:alert": "node scripts/send_telegram_alert.js",
-    "verify:dashboard-urls": "node scripts/verify_dashboard_bundle.js",
-    "smoke:live": "node scripts/smoke_live_site.js",
     "smoke:alert-pipeline": "node scripts/smoke_alert_pipeline.js",
     "smoke:takeoff-ingest": "if [ -x .venv/bin/python ]; then .venv/bin/python scripts/smoke_takeoff_ingest.py; else python3 scripts/smoke_takeoff_ingest.py; fi",
     "webpush:keys": "node scripts/generate_web_push_keys.js",
@@ -60,7 +58,6 @@
     "vite": "latest"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "concurrently": "^10.0.3"
