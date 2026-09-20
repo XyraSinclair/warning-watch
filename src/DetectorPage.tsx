@@ -284,7 +284,7 @@ export default function DetectorPage() {
             An actual CAP warning of type Nuclear Power Plant or Radiological Hazard reports as critical, and a
             Hazardous Materials warning as high, carrying the issuing authority's own text verbatim. An NRC event
             notification at emergency class Alert, Site Area Emergency or General Emergency reports as high; anything
-            else as operator-only.{inputState(status?.sources, ['nrc-events', 'nrc-reactor-status'])}
+            else as operator-only.{inputState(status?.sources, ['nrc-events', 'nrc-reactor-status'])}{' '}
             Agency reporting — outbreak bulletins, IAEA news, aggregate disease feeds — is collected and stays on the
             operator surface. A published report is not one of our detections.
           </dd>
