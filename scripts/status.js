@@ -368,7 +368,8 @@ for (const service of report.services) {
 if (report.serverHttp !== 'ok') problems.push('dashboard server unreachable on :3030');
 // The watch sources that can raise a public alert and are fetching today. NRC
 // has never fetched (HTTP 403): a standing gap the page must state, not a page.
-const ALERTING_WATCH_SOURCES = ['nws-civil-alerts', 'usgs-significant', 'usgs-relevant', 'faa-tfr'];
+// USGS feeds explosion verification only; its health shows on the page.
+const ALERTING_WATCH_SOURCES = ['nws-civil-alerts', 'faa-tfr'];
 for (const source of report.watch?.sourceProblems ?? []) {
   if (ALERTING_WATCH_SOURCES.includes(source.id)) problems.push(`watch source ${source.id}: ${source.health} (${source.error ?? 'no detail'})`);
 }
