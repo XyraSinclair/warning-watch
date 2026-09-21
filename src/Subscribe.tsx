@@ -121,6 +121,10 @@ export function SubscribePanel({ channels }: { channels: Channels | null }) {
         One message when an instrument crosses its threshold, carrying the measurement and its numbers. Nothing else is
         ever sent. Choose how it reaches you.
       </p>
+      <p>
+        Keep your government's own warning switched on: it reaches you first for anything an authority has announced.
+        This watches the instruments for what has not been announced yet, and an instrument can miss.
+      </p>
       <div className="tabs" role="tablist">
         {tabs.map(([key, label]) => (
           <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? 'on' : ''} onClick={() => choose(key)}>
