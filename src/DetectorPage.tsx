@@ -115,8 +115,10 @@ export default function DetectorPage() {
         <p className="purpose">
           We sample public data continuously and raise an alert when a measurement leaves its own baseline by more
           than a fixed threshold. Alerts carry the measurement and its numbers. Every threshold is stated below.
-          Our gamma networks cover Germany, the EURDEP exchange and the United States: an atmospheric burst anywhere
-          else is invisible to these instruments until an authority reports it.
+          Gamma and seismic are the after-the-event instruments: they track fallout, catch a concealed reactor
+          accident and verify an explosion. They do not warn of an attack. Our gamma networks cover Germany, the
+          EURDEP exchange and the United States; a burst anywhere else is invisible to them until an authority
+          reports it.
         </p>
       </header>
 
@@ -238,6 +240,9 @@ export default function DetectorPage() {
             elevated, a second consecutive hour or a second monitor is high, 10 µSv/h while confirmed is critical. In
             1.59 million monitor-hours since January 2025 no RadNet monitor met the station threshold once; the highest
             hour was 0.32 µSv/h. EPA publishes only hours it has approved, so silence from RadNet is not an all-clear.
+            Gamma lags: over 24 hours on 20 Sept 2026 a reading reached us on average 1.3 hours after it was taken on
+            the German network, 3.2 on EURDEP and 33.5 on RadNet. It tells you where a plume went, not that one is
+            coming.
           </dd>
           <dt>Underground detonation</dt>
           <dd>
