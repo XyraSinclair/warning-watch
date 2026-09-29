@@ -37,11 +37,18 @@ delivery path must also remain healthy; silence alone proves neither.
 Everything above runs on the box, so none of it can report the box being gone.
 The off-box dead-man (`config/deadman/`) runs on a second machine of ours as a user timer
 every two minutes: it fetches `https://warning.watch/api/status` and pages a
-public ntfy.sh topic when two consecutive fetches fail, the payload is
-unreadable, or `aircraft.newestSample` is older than 7 minutes (the refresh
-timer runs every 2; the user manager on that box takes about a minute to
-spawn a unit under load, so a stall pages inside ten minutes). It pages on the transition, every 6 hours while dead, and
-sends one recovery note. The topic URL lives only in
+public ntfy.sh topic under two names. Down, at `urgent`: two consecutive
+fetches fail or the payload is unreadable, so an outage pages inside five
+minutes. Stalled, at `high`: the site answers and `aircraft.newestSample` is
+older than 13 minutes. The CBRN timer cuts a sample every 5 minutes, a run
+lands it up to 3 minutes after its slot (median 100 s, slowest 179 s on
+29 Sept 2026), and the ingest writes nothing when both control regions are
+unreachable at adsb.lol, so one missing sample is the feed and two are a
+stall; a stall pages inside seventeen minutes of the last sample. At the
+earlier 7-minute bound one skipped sample paged "DOWN" at `urgent` while the
+site was answering (twice on 29 Sept 2026, 2 of 198 runs). It pages on the
+transition, again when a stall becomes an outage, every 6 hours while either
+holds, and sends one recovery note. The topic URL lives only in
 `~/.config/warning-watch/deadman.env` on that machine, never in this repo; the
 script and units are copied to `~/.local/lib/warning-watch-deadman/` and
 `~/.config/systemd/user/`. Proven 20 Sept 2026: two probes of a dead URL paged
