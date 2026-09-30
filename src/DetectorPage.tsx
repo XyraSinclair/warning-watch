@@ -246,10 +246,11 @@ export default function DetectorPage() {
           </dd>
           <dt>Underground detonation</dt>
           <dd>
-            Every USGS seismic event. One the agency types as a nuclear explosion is critical. Within the listed radius
-            of a known test site, magnitude 3.5 or more is high when it is typed an explosion or is shallower than
-            5 km; when USGS could not constrain the depth it is high at a seismically quiet site and elevated at an
-            active one. Anywhere else, an event typed an explosion at magnitude 4 or more is elevated. The record: all
+            Every USGS seismic event. An event USGS classifies as a nuclear explosion is critical. Within the listed
+            radius of a known test site, magnitude 3.5 or more is high when it is classified as an explosion or is
+            shallower than 5 km; when USGS could not constrain the depth it is high at a seismically quiet site and
+            elevated at an active one. Anywhere else, an event classified as an explosion at magnitude 4 or more is
+            elevated. The record: all
             six North Korean tests are catalogued this way. Over 26.7 years natural earthquakes raised this rule nine
             times, about one every three years: eight elevated, and one high, the aftershock the 2017 test itself
             induced. This rule cannot see an atmospheric burst or a test at an unlisted site, and it is verification, not
@@ -305,7 +306,7 @@ export default function DetectorPage() {
           Agreement is its own rule. The three aircraft cohorts are three instruments: a critical from one of them
           is reported as high, and says so, unless a second cohort is at elevated or above within 90 minutes.
           Three things reach critical alone, because each is already a confirmation: radiation at 10 µSv/h once
-          stations or consecutive hours agree, a seismic event USGS types as a nuclear explosion, and an authority's own CAP warning.
+          stations or consecutive hours agree, a seismic event USGS classifies as a nuclear explosion, and an authority's own CAP warning.
         </p>
         <p>
           Each tier has a false-alarm budget, and thresholds are set from the measured record to meet it: elevated at
