@@ -104,7 +104,7 @@ export default function DetectorPage() {
   const alerts = status?.alerts ?? [];
   const RECENT_MS = 7 * 86400000;
   const recent = alerts.filter((alert) => Date.now() - Date.parse(alert.occurredAt) <= RECENT_MS);
-  const older = alerts.slice(recent.length);
+  const older = alerts.filter((alert) => !recent.includes(alert));
   const behaviour = status?.aviation.behaviour;
   const radiation = status?.radiation;
 
@@ -124,12 +124,12 @@ export default function DetectorPage() {
 
       {error && <p className="err">Status unavailable: {error}</p>}
 
-      <SubscribePanel channels={status?.channels ?? null} />
-
       <section>
         <h2>Alerts</h2>
         <h3 className="sub">Last seven days</h3>
-        {recent.length === 0 ? (
+        {!status ? (
+          <p className="quiet">{error ? 'The alert record could not be loaded, so this page cannot say whether an alert is open.' : 'Loading the alert record.'}</p>
+        ) : recent.length === 0 ? (
           <p className="quiet">No alert has been raised.</p>
         ) : (
           <ol className="alerts">
@@ -137,7 +137,7 @@ export default function DetectorPage() {
               <li key={`${alert.kind}-${alert.occurredAt}-${alert.title}`} className={`alert sev-${alert.severity}`}>
                 <div className="alert-head">
                   <span className={`sev ${alert.severity}`}>{alert.severity}</span>
-                  <time>{utc(alert.occurredAt)}</time>
+                  <time dateTime={alert.occurredAt}>{utc(alert.occurredAt)}</time>
                   <span className="ago">{ago(alert.occurredAt)}</span>
                 </div>
                 <h3>{alert.title}</h3>
@@ -153,7 +153,7 @@ export default function DetectorPage() {
               {older.map((alert) => (
                 <li key={`${alert.kind}-${alert.occurredAt}-${alert.title}`}>
                   <span className={`sev ${alert.severity}`}>{alert.severity}</span>
-                  <time>{utc(alert.occurredAt)}</time>
+                  <time dateTime={alert.occurredAt}>{utc(alert.occurredAt)}</time>
                   <span>{alert.title}</span>
                 </li>
               ))}
@@ -162,14 +162,17 @@ export default function DetectorPage() {
         )}
       </section>
 
+      <SubscribePanel channels={status?.channels ?? null} />
+
+
       <section>
         <h2>Flight tracking</h2>
         <p>
           We read the whole sky. Every half hour, every aircraft broadcasting a position anywhere on Earth is matched
           against a roster of {num.format(status?.cohorts?.[0]?.roster ?? 0)} business jets and{' '}
           {num.format(status?.cohorts?.[1]?.roster ?? 0)} military airframes, and aircraft broadcasting an address no
-          registry issued are counted beside them. Over {num.format(status?.aircraft.regions ?? 0)} watched regions, nuclear
-          plants and fuel-cycle sites, chemical complexes, two capitals and two control regions, we sample the airspace
+          registry issued are counted beside them. Over {num.format(status?.aircraft.regions ?? 0)} watched regions (nuclear
+          plants and fuel-cycle sites, chemical complexes, two capitals and two control regions) we sample the airspace
           every five minutes. The people with the most to lose and the best information
           move first, and they move by air: {num.format(status?.aviation.departures.records ?? 0)} departures over{' '}
           {num.format(status?.aviation.departures.days ?? 0)} days are the baseline every new half hour is scored
@@ -232,11 +235,11 @@ export default function DetectorPage() {
         <dl className="rules">
           <dt>Gamma dose rate</dt>
           <dd>
-            Per station, 30-day baseline, minimum 48 hourly samples. A station departs at 3× its median and +0.5
-            µSv/h, or at 5 µSv/h outright. A single station never exceeds the operator surface. The public tiers need
+            Per station, 30-day baseline, minimum 48 hourly samples. A station is out of line at 3× its median and at
+            least 0.5 µSv/h above it, or at 5 µSv/h outright. One station alone notifies only the operator. The public tiers need
             coherence: every station in the group at a robust score of 5 or more, under at least two station names,
             with 3 stations within 50 km for elevated, 5 for high, 15 or any station at 10 µSv/h for critical.
-            EPA RadNet has one monitor per city, so it asks agreement of time instead of space: one departing hour is
+            EPA RadNet has one monitor per city, so it asks agreement of time instead of space: one hour out of line is
             elevated, a second consecutive hour or a second monitor is high, 10 µSv/h while confirmed is critical. In
             1.59 million monitor-hours since January 2025 no RadNet monitor met the station threshold once; the highest
             hour was 0.32 µSv/h. EPA publishes only hours it has approved, so silence from RadNet is not an all-clear.
@@ -259,8 +262,8 @@ export default function DetectorPage() {
           <dt>Air traffic over a region</dt>
           <dd>
             Per region, same-hour baseline over 21 days, minimum 10 samples and a median of at least 15 aircraft, so
-            a sky that is normally empty cannot go void. Void at 25 % of the median, or a score of
-            −5. Elevated when a void holds at 10 % of the median for three consecutive samples. Both control regions
+            a sky that is normally empty cannot go void. A region is void at 25 % of its median or a
+            score of −5. Elevated when a void holds at 10 % of the median for three consecutive samples. Both control regions
             must report, or the sample is discarded as a feed failure.
           </dd>
           <dt>Aircraft turnarounds</dt>
@@ -268,8 +271,8 @@ export default function DetectorPage() {
             A bearing change of 120° or more at 10,000 ft or above, with both legs at least 20 nm, so manoeuvring near
             an airfield cannot qualify. A cluster needs 3 aircraft (5 in the military cohort) within
             200 km of each other inside 60 minutes, and three times the median for the same hour on the previous 21
-            days, minimum 10 samples. Twice the floor, 6 or 10, reaches high. One aircraft never leaves the operator
-            surface.
+            days, minimum 10 samples. Twice the floor, 6 or 10, reaches high. One aircraft alone notifies only the
+            operator.
           </dd>
           <dt>Departure concentration</dt>
           <dd>
@@ -283,8 +286,8 @@ export default function DetectorPage() {
             than 1 half-hour in 1,460 — twelve a year. High is 1 in 4,380; critical, 1 in 17,520. A cohort's public
             tiers open once its scored record holds 1,460 half-hours; the business-jet record does, the military
             record reaches it about 20 October 2026. A slower exodus is
-            carried by a sustained-shift accumulator on the number airborne: 3× reaches high within an hour and
-            critical within two.
+            caught by a running tally of how far the number airborne stays above normal: three times normal reaches
+            high within an hour and critical within two.
           </dd>
           <dt>Notices</dt>
           <dd>
@@ -292,12 +295,12 @@ export default function DetectorPage() {
             Hazardous Materials warning as high, carrying the issuing authority's own text verbatim. An NRC event
             notification at emergency class Alert, Site Area Emergency or General Emergency reports as high; anything
             else as operator-only.{inputState(status?.sources, ['nrc-events', 'nrc-reactor-status'])}{' '}
-            Agency reporting — outbreak bulletins, IAEA news, aggregate disease feeds — is collected and stays on the
-            operator surface. A published report is not one of our detections.
+            Agency reporting — outbreak bulletins, IAEA news, aggregate disease feeds — is collected and goes to the
+            operator only. A published report is not one of our detections.
           </dd>
           <dt>Vocabulary</dt>
           <dd>
-            Matched CBRN event words per place per hour against a 14-day same-hour baseline, minimum 10 samples.
+            We count matched CBRN event words per place per hour against a 14-day same-hour baseline, minimum 10 samples.
             Elevated at 8 matched terms across 3 posts and three times the median; high at 25 across 8. Never
             critical on its own.{inputState(status?.sources, ['bluesky-posts', 'gdelt-reporting'])}
           </dd>

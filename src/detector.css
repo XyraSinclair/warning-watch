@@ -64,7 +64,7 @@
 .detector .tabs button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
 .detector .pane p:last-child { margin-bottom: 0; }
 .detector .copyrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.detector .copyrow code { font-size: 14px; padding: 7px 10px; flex: 1 1 auto; }
+.detector .copyrow code { font-size: 14px; padding: 7px 10px; flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .detector .copyrow input { font: inherit; flex: 1 1 220px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); }
 .detector button { font: inherit; font-size: 14px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); cursor: pointer; }
 .detector .action, .detector a.action { display: inline-block; padding: 8px 14px; border-radius: 6px; background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; text-decoration: none; }
