@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS flight_behaviour_hour_origins (
 const SOURCE = 'adsbx_heatmap';
 const radians = (degrees) => degrees * Math.PI / 180;
 const round = (value, digits = 2) => Number(value.toFixed(digits));
+const at = ({ lat, lon }) => `${Math.abs(lat).toFixed(1)}° ${lat < 0 ? 'S' : 'N'}, ${Math.abs(lon).toFixed(1)}° ${lon < 0 ? 'W' : 'E'}`;
+const COHORT_WORDS = { global_business_jet: 'business jets', global_military_aircraft: 'military aircraft' };
 const iso = (time) => new Date(time).toISOString();
 const bucket = (time) => Math.floor(time / SLOT);
 
@@ -275,7 +277,7 @@ function detect(db, options, eventsDb = null) {
   else if (turnGroups.length && turnGroups[0] >= 3 * turnBaseline.median) {
     const count = turnGroups[0];
     const level = count >= 2 * turnFloor ? 4 : 3;
-    emit('flight_turnaround_cluster', level, `${iso(Math.floor(end / (60 * MINUTE)) * 60 * MINUTE)}`, end, `${count} aircraft turned around`, `${count} distinct aircraft turned around in ${options.cohort} within ${options.minutes} minutes, linked by separations <= 200 km, vs a same-hour median of ${turnBaseline.median} across ${turnBaseline.sampleCount} previous days. Threshold: count >= ${turnFloor} and >= 3x median.`, { count, baseline_median: turnBaseline.median, baseline_samples: turnBaseline.sampleCount, radius_km: 200, window_minutes: options.minutes, aircraft: currentTurns.slice(0, 20).map((turn) => ({ hex: turn.hex, registration: turn.registration, bearing_change: turn.bearing_change, midpoint: turn.midpoint })) });
+    emit('flight_turnaround_cluster', level, `${iso(Math.floor(end / (60 * MINUTE)) * 60 * MINUTE)}`, end, `${count} aircraft turned around`, `${count} ${COHORT_WORDS[options.cohort] ?? options.cohort} turned around within ${options.minutes} minutes, each within 200 km of another, against a median of ${round(turnBaseline.median, 1)} for this hour over the previous ${turnBaseline.sampleCount} days. The threshold is ${turnFloor} aircraft and three times the median.`, { count, baseline_median: turnBaseline.median, baseline_samples: turnBaseline.sampleCount, radius_km: 200, window_minutes: options.minutes, aircraft: currentTurns.slice(0, 20).map((turn) => ({ hex: turn.hex, registration: turn.registration, bearing_change: turn.bearing_change, midpoint: turn.midpoint })) });
   }
   const departureHistory = historical.filter((samples) => samples.every((sample) => sample.spatialCovered));
   if (departureHistory.length < 10) summary.warming += 1;
@@ -288,13 +290,11 @@ function detect(db, options, eventsDb = null) {
     const baseline = robustStats(departureHistory.map((samples) => samples.reduce((sum, sample) => sum + sample.points.filter((point) => group.some((member) => distanceKm(point, member) <= 60)).length * sample.weight, 0)));
     if (baseline.sampleCount < 10 || baseline.median < 1 || group.length < 3 * baseline.median) continue;
     const center = centroid(group);
-    const nearest = group.reduce((best, point) => distanceKm(point, center) < distanceKm(best, center) ? point : best);
-    const place = `${nearest.label || nearest.registration || nearest.hex} (${round(center.lat, 1)}, ${round(center.lon, 1)})`;
     const level = group.length >= 2 * Math.max(6, 3 * baseline.median) ? 4 : 3;
     // A stable member and hour identify the episode, even when its centroid
     // shifts as more departures arrive. Reuse a same-hour overlapping event.
     const hour = iso(Math.floor(end / (60 * MINUTE)) * 60 * MINUTE);
-    emit('takeoff_origin_cluster', level, `${hour}:${group.map((point) => point.hex).sort()[0]}`, end, `${group.length} departures near ${place}`, `${group.length} distinct aircraft departed near ${place} within ${options.minutes} minutes vs a same-hour median of ${baseline.median} over ${baseline.sampleCount} previous days. Threshold: count >= 6 and >= 3x median; departures linked by separations <= 60 km.`, { count: group.length, baseline_median: baseline.median, baseline_samples: baseline.sampleCount, window_minutes: options.minutes, radius_km: 60, centroid: { lat: round(center.lat, 1), lon: round(center.lon, 1) }, aircraft: group.map(({ hex, registration, lat, lon }) => ({ hex, registration, lat: round(lat), lon: round(lon) })) });
+    emit('takeoff_origin_cluster', level, `${hour}:${group.map((point) => point.hex).sort()[0]}`, end, `${group.length} departures near ${at(center)}`, `${group.length} ${COHORT_WORDS[options.cohort] ?? options.cohort} took off near ${at(center)} within ${options.minutes} minutes, each within 60 km of another, against a median of ${round(baseline.median, 1)} for this place and hour over the previous ${baseline.sampleCount} days. The threshold is 6 departures and three times the median.`, { count: group.length, baseline_median: baseline.median, baseline_samples: baseline.sampleCount, window_minutes: options.minutes, radius_km: 60, centroid: { lat: round(center.lat, 1), lon: round(center.lon, 1) }, aircraft: group.map(({ hex, registration, lat, lon }) => ({ hex, registration, lat: round(lat), lon: round(lon) })) });
   }
   summary.clusters = events.filter((event) => event.kind !== 'flight_turnaround').length;
   return { events, summary };

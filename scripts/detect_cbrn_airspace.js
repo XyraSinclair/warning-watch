@@ -126,7 +126,7 @@ function detect(db, settings, now = Date.now()) {
         if (isVoid && s > 0) {
           const level = consecutive >= 3 && row.aircraft_count <= 0.1 * stats.median ? 3 : 1;
           const facts = { lat: region.lat, lon: region.lon, count: row.aircraft_count, baseline_median: stats.median, baseline_samples: sameHour.length, z, cusum: s, consecutive, absolute_floor: { baseline_median: 15, public_max_ratio: 0.1 }, fusion_eligible: level === 3 };
-          emit(KIND.AIRSPACE_VOID, level, 'Air traffic drop', `Air traffic over ${region.name}: ${row.aircraft_count} aircraft vs a same-hour median of ${stats.median} (21 days, ${sameHour.length} samples); robust z ${z.toFixed(2)}, ${consecutive} consecutive low samples, CUSUM ${s.toFixed(2)}. Threshold: count <= 0.25x median or z <= -5, CUSUM > 0.`, facts, [region.id, 'void', hour]);
+          emit(KIND.AIRSPACE_VOID, level, 'Air traffic drop', `Air traffic over ${region.name}: ${row.aircraft_count} aircraft against a median of ${Number(stats.median.toFixed(1))} for this hour over 21 days (${sameHour.length} samples), robust score ${z.toFixed(1)}, low for ${consecutive} consecutive ${consecutive === 1 ? 'sample' : 'samples'}. A region is void at 25 % of its median or a score of −5.`, facts, [region.id, 'void', hour]);
           if (level === 3) setState(`fusion:${region.id}`, 'window', { region: region.id, timestamp: row.sampled_at, occurred_at: row.sampled_at, kind: KIND.AIRSPACE_VOID, level, control_healthy: true, ...facts });
         }
       }
