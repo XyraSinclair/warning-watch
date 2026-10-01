@@ -31,21 +31,19 @@ function minutesSince(value) {
   return Number.isFinite(parsed) ? Math.max(0, Math.round((Date.now() - parsed) / 60000)) : null;
 }
 
+// The alert record is the one read this page cannot do without: if it
+// cannot be read, the status fails loudly rather than reading as no alerts.
 function readAlerts(db) {
-  if (!db) return [];
-  try {
-    // A retracted alert was raised under a threshold the instrument has since
-    // recalibrated. It stays in the record with its delivery state intact, and
-    // leaves the public feed.
-    return db.prepare(
-      `SELECT kind, severity, cohort, occurred_at AS occurredAt, title, message
-         FROM alert_events
-        WHERE ${PUBLIC_EVENT_SQL}
-        ORDER BY occurred_at DESC, id DESC LIMIT ?`,
-    ).all(MAX_ALERTS);
-  } catch {
-    return [];
-  }
+  if (!db) throw new Error("alert record unavailable");
+  // A retracted alert was raised under a threshold the instrument has since
+  // recalibrated. It stays in the record with its delivery state intact, and
+  // leaves the public feed.
+  return db.prepare(
+    `SELECT kind, severity, cohort, occurred_at AS occurredAt, title, message
+       FROM alert_events
+      WHERE ${PUBLIC_EVENT_SQL}
+      ORDER BY occurred_at DESC, id DESC LIMIT ?`,
+  ).all(MAX_ALERTS);
 }
 
 function readRadiation(db) {
