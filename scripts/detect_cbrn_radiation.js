@@ -148,7 +148,7 @@ function detect(db, settings, now = Date.now()) {
     const existing = existingQuery?.get(eventKey);
     if (existing && RANK[existing.severity] >= 3) publicKeys.add(eventKey);
     let suppression = null;
-    if (level >= 3 && budgetKey && !publicKeys.has(eventKey)) { suppression = `Public radiation budget: one new public event per six hours; ${budgetKey}`; level = 1; summary.suppressed_events += 1; }
+    if (level >= 3 && level < 5 && budgetKey && !publicKeys.has(eventKey)) { suppression = `Public radiation budget: one new public event per six hours; ${budgetKey}`; level = 1; summary.suppressed_events += 1; }
     else if (level >= 3 && !(existing && RANK[existing.severity] >= 3)) { budgetKey = eventKey; publicKeys.add(eventKey); }
     let diameter = 0;
     for (const a of group) for (const b of group) diameter = Math.max(diameter, haversineKm(a.lat, a.lon, b.lat, b.lon));
