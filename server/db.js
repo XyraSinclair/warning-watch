@@ -107,6 +107,11 @@ function migrateSchema(db) {
     }
   }
   db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_subscribers_push_endpoint_hash ON notification_subscribers (push_endpoint_hash)").run();
+  // The severity a delivery carried: an escalation is new news to someone who
+  // heard the lower tier. NULL rows predate the column and count as current.
+  if (!db.pragma('table_info(alert_deliveries)').some((column) => column.name === 'severity')) {
+    db.prepare('ALTER TABLE alert_deliveries ADD COLUMN severity TEXT').run();
+  }
 }
 
 function getDb() {

@@ -786,7 +786,8 @@ function recordDelivery(db, delivery) {
       status,
       provider_message_id,
       error,
-      attempted_at
+      attempted_at,
+      severity
     ) VALUES (
       @alertEventId,
       @subscriberId,
@@ -795,9 +796,11 @@ function recordDelivery(db, delivery) {
       @status,
       @providerMessageId,
       @error,
-      @attemptedAt
+      @attemptedAt,
+      @severity
     )
     ON CONFLICT(alert_event_id, subscriber_id, channel) DO UPDATE SET
+      severity = excluded.severity,
       destination_hash = excluded.destination_hash,
       status = excluded.status,
       provider_message_id = excluded.provider_message_id,
@@ -806,7 +809,7 @@ function recordDelivery(db, delivery) {
   `).run(delivery);
 }
 
-function hasSentDelivery(db, alertEventId, subscriberId, channel) {
+function hasSentDelivery(db, alertEventId, subscriberId, channel, severity) {
   return Boolean(db.prepare(`
     SELECT 1
     FROM alert_deliveries
@@ -814,7 +817,8 @@ function hasSentDelivery(db, alertEventId, subscriberId, channel) {
       AND subscriber_id = ?
       AND channel = ?
       AND status = 'sent'
-  `).get(alertEventId, subscriberId, channel));
+      AND (severity IS NULL OR severity = ?)
+  `).get(alertEventId, subscriberId, channel, severity));
 }
 
 function buildEmailAlertText(env, alert, subscriber) {
@@ -955,6 +959,7 @@ async function dispatchOne(db, env, alert, subscriber, channel, pacer = null, re
       providerMessageId: result.providerMessageId,
       error: null,
       attemptedAt,
+      severity: alert.severity,
     });
     if (channel === 'push') {
       markPushDeliverySucceeded(db, subscriber.id);
@@ -973,6 +978,7 @@ async function dispatchOne(db, env, alert, subscriber, channel, pacer = null, re
       providerMessageId: null,
       error: error.message,
       attemptedAt,
+      severity: alert.severity,
     });
     return { ok: false, channel, error: error.message };
   }
@@ -1054,9 +1060,9 @@ async function dispatchPendingAlerts(db, env = process.env, { limit = ALERT_DISP
 
       const work = [];
       for (const subscriber of subscribers) {
-        if (subscriber.email && !hasSentDelivery(db, alert.id, subscriber.id, 'email')) work.push({ subscriber, channel: 'email' });
-        if (subscriber.phone && !hasSentDelivery(db, alert.id, subscriber.id, 'sms')) work.push({ subscriber, channel: 'sms' });
-        if (subscriber.pushSubscription && !hasSentDelivery(db, alert.id, subscriber.id, 'push')) work.push({ subscriber, channel: 'push' });
+        if (subscriber.email && !hasSentDelivery(db, alert.id, subscriber.id, 'email', alert.severity)) work.push({ subscriber, channel: 'email' });
+        if (subscriber.phone && !hasSentDelivery(db, alert.id, subscriber.id, 'sms', alert.severity)) work.push({ subscriber, channel: 'sms' });
+        if (subscriber.pushSubscription && !hasSentDelivery(db, alert.id, subscriber.id, 'push', alert.severity)) work.push({ subscriber, channel: 'push' });
       }
       if (!work.length) {
         continue;
