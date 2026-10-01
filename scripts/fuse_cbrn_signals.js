@@ -10,6 +10,9 @@ const FAMILIES = new Map([
   [KIND.OFFICIAL_NOTICE, 'official'], [KIND.LEXICAL_BURST, 'lexical'],
 ]);
 
+const AGREEMENT_MS = 90 * 60000;
+const PUBLIC = new Set(['elevated', 'high', 'critical']);
+
 function options(argv) {
   const result = { eventsDb: process.env.EWS_DB_PATH || path.resolve(__dirname, '../data/ews-main.sqlite'), db: process.env.EWS_CBRN_DB_PATH, windowMinutes: 720, dryRun: false };
   const names = { '--events-db': 'eventsDb', '--cbrn-db': 'db', '--window-minutes': 'windowMinutes' };
@@ -41,7 +44,9 @@ function detect(db, eventsDb, settings, now = Date.now()) {
     if (!region && !hasPoint) continue;
     candidates.push({ ...row, family: FAMILIES.get(row.kind), region, lat: hasPoint ? lat : null, lon: hasPoint ? lon : null });
   }
-  const agrees = (a, b) => (a.region && a.region === b.region) || (a.lat !== null && b.lat !== null && haversineKm(a.lat, a.lon, b.lat, b.lon) <= 150);
+  // Agreement is place and time: two observations hours apart are two stories, not one.
+  const near = (a, b) => (a.region && a.region === b.region) || (a.lat !== null && b.lat !== null && haversineKm(a.lat, a.lon, b.lat, b.lon) <= 150);
+  const agrees = (a, b) => near(a, b) && Math.abs(Date.parse(a.occurred_at) - Date.parse(b.occurred_at)) <= AGREEMENT_MS;
   // Complete linkage: a long chain of nearby reports cannot connect distant
   // events that do not themselves agree in place.
   const groups = new Map();
@@ -80,7 +85,8 @@ function detect(db, eventsDb, settings, now = Date.now()) {
     const contributors = group.map((row) => ({ event_key: row.event_key, kind: row.kind, source_family: row.family, observed_at: row.occurred_at, distance_km: row.lat !== null && lat !== null ? haversineKm(lat, lon, row.lat, row.lon) : null }));
     const observedAt = group.map((row) => row.occurred_at).sort().at(-1);
     const region = group.every((row) => row.region === group[0].region) ? group[0].region : null;
-    const level = group.some((row) => row.kind === KIND.OFFICIAL_NOTICE) ? 5 : 4;
+    // Only an authority's own public-tier warning makes agreement critical; watch-level official context does not.
+    const level = group.some((row) => row.kind === KIND.OFFICIAL_NOTICE && PUBLIC.has(row.severity)) ? 5 : 4;
     const message = `${contributors.length} observations ${region ? `in ${region}` : `near ${lat.toFixed(2)}, ${lon.toFixed(2)}`}: ${contributors.map((row) => `${row.kind} observed ${row.observed_at}, ${row.distance_km === null ? 'distance unavailable (same named region)' : `${row.distance_km.toFixed(1)} km from the group centroid`}`).join('; ')}. Threshold: >= 2 kinds from >= 2 source families within ${settings.windowMinutes} minutes; each pair shares a named region or is <= 150 km apart.`;
     const event = buildCbrnEvent({ kind: KIND.FUSED, level, occurredAt: observedAt, title: `${contributors.length} CBRN observations in one region`, message, source: [...new Set(group.map((row) => row.family))].sort().join(', '), keyParts: [groupKey], payload: { region, centroid_lat: lat, centroid_lon: lon, contributors, source_families: [...new Set(group.map((row) => row.family))].sort(), window_minutes: settings.windowMinutes, fusion_eligible: false } });
     events.push(event);

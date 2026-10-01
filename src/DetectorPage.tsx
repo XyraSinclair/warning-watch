@@ -310,10 +310,13 @@ export default function DetectorPage() {
           is reported as high, and says so, unless a second cohort is at elevated or above within 90 minutes.
           Three things reach critical alone, because each is already a confirmation: radiation at 10 µSv/h once
           stations or consecutive hours agree, a seismic event USGS classifies as a nuclear explosion, and an authority's own CAP warning.
+          Observations from two different instrument families within 150 km and 90 minutes of each other are reported
+          together as high, and as critical when one of them is an authority's own public warning.
         </p>
         <p>
-          Each tier has a false-alarm budget, and thresholds are set from the measured record to meet it: elevated at
-          most twelve times a year, high four, critical one. An instrument that stops reporting pages the operator,
+          Takeoff volume sets its thresholds from a false-alarm budget: elevated at most twelve times a year, high
+          four, critical one. The other rules use fixed thresholds, checked against the measured record given with
+          each rule where we have one. An instrument that stops reporting pages the operator,
           and the table below shows which inputs are answering. A quiet page means nothing crossed a threshold. It
           never means nothing happened.
         </p>
