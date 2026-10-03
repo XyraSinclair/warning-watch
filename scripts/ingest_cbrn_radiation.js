@@ -37,11 +37,17 @@ function options(argv) {
   return result;
 }
 
-async function fetchNetwork(network) {
+// The BfS WFS returns at most 1000 features per request whatever count asks
+// for (measured 2026-10-03; EURDEP is 17085 rows, five window labels per
+// station), so every network is read in id-sorted pages, four at a time, and
+// the pages must add up to the server's own numberMatched.
+const PAGE = 1000;
+
+async function fetchPage(network, startIndex) {
   const url = new URL('https://www.imis.bfs.de/ogc/opendata/ows');
-  url.search = new URLSearchParams({ service: 'WFS', version: '2.0.0', request: 'GetFeature', typeName: `opendata:${NETWORKS[network]}`, outputFormat: 'application/json', propertyName: PROPERTIES }).toString();
+  url.search = new URLSearchParams({ service: 'WFS', version: '2.0.0', request: 'GetFeature', typeName: `opendata:${NETWORKS[network]}`, outputFormat: 'application/json', propertyName: PROPERTIES, sortBy: 'id', count: String(PAGE), startIndex: String(startIndex) }).toString();
   const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT, 'Accept-Encoding': 'gzip' }, signal: AbortSignal.timeout(60000) });
-  if (!response.ok) { await response.body?.cancel(); throw new Error(`WFS HTTP ${response.status}`); }
+  if (!response.ok) { await response.body?.cancel(); throw new Error(`WFS HTTP ${response.status} at startIndex ${startIndex}`); }
   const chunks = [];
   let bytes = 0;
   for await (const chunk of response.body) {
@@ -50,8 +56,29 @@ async function fetchNetwork(network) {
     chunks.push(chunk);
   }
   const data = JSON.parse(Buffer.concat(chunks, bytes).toString('utf8'));
-  if (data?.type !== 'FeatureCollection' || !Array.isArray(data.features) || !data.features.length || data.features.length > MAX_FEATURES) throw new Error('Invalid, empty or oversized WFS FeatureCollection');
+  if (data?.type !== 'FeatureCollection' || !Array.isArray(data.features) || !Number.isInteger(data.numberMatched)) throw new Error(`Invalid WFS FeatureCollection at startIndex ${startIndex}`);
   return { data, bytes, contentEncoding: response.headers.get('content-encoding'), wireBytes: response.headers.get('content-length') };
+}
+
+async function fetchNetwork(network) {
+  const first = await fetchPage(network, 0);
+  const matched = first.data.numberMatched;
+  if (!matched || matched > MAX_FEATURES) throw new Error(`WFS numberMatched ${matched} is empty or oversized`);
+  const starts = [];
+  for (let start = PAGE; start < matched; start += PAGE) starts.push(start);
+  const pages = [first, ...new Array(starts.length)];
+  let next = 0;
+  const worker = async () => {
+    while (next < starts.length) {
+      const index = next;
+      next += 1;
+      pages[index + 1] = await fetchPage(network, starts[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: 4 }, worker));
+  const features = pages.flatMap((page) => page.data.features);
+  if (features.length !== matched) throw new Error(`WFS pages returned ${features.length} of ${matched} features`);
+  return { data: { type: 'FeatureCollection', features }, bytes: pages.reduce((sum, page) => sum + page.bytes, 0), pages: pages.length, contentEncoding: first.contentEncoding, wireBytes: first.wireBytes };
 }
 
 function ingestCollection(db, network, result, now = Date.now()) {
@@ -85,7 +112,7 @@ function ingestCollection(db, network, result, now = Date.now()) {
   const returnedKnown = [...roster].filter((id) => seen.has(id)).length;
   const partial = roster.size > 0 && returnedKnown < 0.8 * roster.size;
   const stale = !newest || now - Date.parse(newest) > 3 * 3600000;
-  const detail = { features: result.data.features.length, stations: rows.length, readings: rows.length - invalidReadings, invalid_readings: invalidReadings, roster: roster.size, returned_known: returnedKnown, shortfall: roster.size - returnedKnown, partial, stale, newest, bytes: result.bytes, content_encoding: result.contentEncoding, wire_bytes: result.wireBytes, statuses };
+  const detail = { features: result.data.features.length, stations: rows.length, readings: rows.length - invalidReadings, invalid_readings: invalidReadings, roster: roster.size, returned_known: returnedKnown, shortfall: roster.size - returnedKnown, partial, stale, newest, bytes: result.bytes, pages: result.pages, content_encoding: result.contentEncoding, wire_bytes: result.wireBytes, statuses };
   return store(db, network, rows, detail);
 }
 
