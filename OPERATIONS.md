@@ -60,7 +60,9 @@ text with the numbers removed. It pages once it has lasted 3 minutes, again
 every 6 hours through its first day, then at 24 hours and daily after at
 `urgent` priority with its age in the title. It is over only after 10 minutes
 of absence, so a flapping failure neither storms nor hides, and a one-run blip
-pages nothing. One recovery note goes out when every paged problem has cleared.
+of a two-minute unit pages nothing. A failed CBRN run stays in the verdict
+until the next run lands, about seven minutes, so one crashed pass pages
+once. One recovery note goes out when every paged problem has cleared.
 The reason is the record: in the two weeks to 19 Sept 2026 the old
 hash-of-the-whole-set rule sent about 150 pages (a false pair every night while
 the backup was mid-write, bursts every two minutes from a minute counter in the
@@ -122,10 +124,20 @@ Logs: `journalctl -u warning-watch-refresh` (and the other unit names).
 Deploying a change: commit and push to `main`, then
 
 ```sh
-ssh xyra-dev-hetzner 'cd /opt/dev/warning-watch && sudo -H -u xyra git pull --ff-only && sudo -H -u xyra npm ci --include=dev && sudo -H -u xyra npm run build && systemctl restart warning-watch.service'
-# unit-file changes additionally need:
-#   cp config/systemd/* /etc/systemd/system/ && systemctl daemon-reload
+ssh xyra-dev-hetzner 'cd /opt/dev/warning-watch && sudo -H -u xyra git pull --ff-only && deploy/deploy.sh'
 ```
+
+`deploy/deploy.sh` installs dependencies only when `package-lock.json` no
+longer matches the installed tree, builds, installs any changed unit files
+from `config/systemd/` with a daemon-reload, restarts the server, and prints
+the status verdict; a deploy is done when that `verify:` line is read. Every
+timer unit runs its pass holding `tmp/deploy.flock` shared and the deploy
+takes it exclusively around `npm ci`, which empties `node_modules` before
+refilling it: on 3 Oct 2026 four timers fired at 18:00:00 UTC into an
+install begun at 17:59:57, the cbrn ingest stages died with "Could not
+locate the bindings file", and the watchdog paged. A pass that cannot get
+the lock inside 60 seconds fails visibly rather than running on a half-built
+tree.
 
 ## Continuous digital watch
 

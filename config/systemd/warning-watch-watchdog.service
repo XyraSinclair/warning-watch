@@ -9,5 +9,5 @@ User=xyra
 WorkingDirectory=/opt/dev/warning-watch
 EnvironmentFile=/etc/warning-watch.env
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/node scripts/ops_alert.js
+ExecStart=/usr/bin/flock -s -w 60 tmp/deploy.flock /usr/bin/node scripts/ops_alert.js
 NoNewPrivileges=true

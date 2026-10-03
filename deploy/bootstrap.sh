@@ -63,6 +63,7 @@ fi
 
 echo "--- node + python deps"
 sudo -u "$RUN_USER" bash -c "cd '$TARGET' && npm ci"
+sudo -u "$RUN_USER" install -d "$TARGET/tmp"   # deploy.flock lives here; units lock it before node runs
 sudo -u "$RUN_USER" bash -c "cd '$TARGET' && python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt"
 
 echo "--- ntfy config (canonical source: config/ntfy-server.yml)"

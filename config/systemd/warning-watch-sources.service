@@ -11,7 +11,7 @@ Environment=NODE_ENV=production
 Environment=EWS_WATCH_MODEL=google/gemini-2.5-flash-lite
 Environment=EWS_WATCH_DAILY_BUDGET_USD=0.10
 EnvironmentFile=-/etc/warning-watch-sources.env
-ExecStart=/usr/bin/node scripts/run_watch.js
+ExecStart=/usr/bin/flock -s -w 60 tmp/deploy.flock /usr/bin/node scripts/run_watch.js
 TimeoutStartSec=240
 TimeoutStopSec=10
 KillMode=control-group

@@ -9,5 +9,5 @@ User=xyra
 WorkingDirectory=/opt/dev/warning-watch
 EnvironmentFile=/etc/warning-watch.env
 Environment=NODE_ENV=production
-ExecStart=/bin/sh -c '/usr/bin/node scripts/backtest_detector.js --db data/ews-main.sqlite --cohort global_business_jet --inject-exodus --assert && /usr/bin/node scripts/backtest_detector.js --db data/ews-military.sqlite --cohort global_military_aircraft --inject-exodus --assert'
+ExecStart=/usr/bin/flock -s -w 60 tmp/deploy.flock /bin/sh -c '/usr/bin/node scripts/backtest_detector.js --db data/ews-main.sqlite --cohort global_business_jet --inject-exodus --assert && /usr/bin/node scripts/backtest_detector.js --db data/ews-military.sqlite --cohort global_military_aircraft --inject-exodus --assert'
 NoNewPrivileges=true

@@ -7,5 +7,5 @@ User=xyra
 WorkingDirectory=/opt/dev/warning-watch
 EnvironmentFile=/etc/warning-watch.env
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/node scripts/backup_databases.js
+ExecStart=/usr/bin/flock -s -w 60 tmp/deploy.flock /usr/bin/node scripts/backup_databases.js
 NoNewPrivileges=true
