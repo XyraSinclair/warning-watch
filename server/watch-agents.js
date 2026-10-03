@@ -281,6 +281,9 @@ async function runInference(coverage, run, { env = process.env, signal, fetchImp
   if (!configuration.configured) throw failure("provider_not_configured");
   const { model, provider } = configuration;
   const key = provider === "scry" ? env.SCRY_API_KEY : env.OPENROUTER_API_KEY;
+  // Scry bills inference to the wallet's cash or promo credit. With an OpenRouter key also set, Scry runs the
+  // call on that key instead (sent per call, never stored), so an unfunded wallet does not stop the watch.
+  const funding = provider === "scry" && env.OPENROUTER_API_KEY ? { "x-provider-key": env.OPENROUTER_API_KEY } : {};
   const endpoint = provider === "scry" ? "https://api.scry.io/v1/scry/openrouter" : "https://openrouter.ai/api/v1/chat/completions";
   const controller = new AbortController();
   let timedOut = false;
@@ -313,7 +316,7 @@ async function runInference(coverage, run, { env = process.env, signal, fetchImp
     try {
       response = await fetchImpl(endpoint, {
         method: "POST", redirect: "error", signal: requestController.signal,
-        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", Accept: "application/json" }, body,
+        headers: { Authorization: `Bearer ${key}`, ...funding, "Content-Type": "application/json", Accept: "application/json" }, body,
       });
       if (!response.ok) {
         await response.body?.cancel().catch(() => {});
