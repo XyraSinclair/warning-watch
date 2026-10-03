@@ -43,5 +43,5 @@ systemctl restart warning-watch.service
 as_xyra npm run status --silent | node -e '
   let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => {
     const v = JSON.parse(s).verdict;
-    console.log(`verify: healthy=${v.healthy} problems=${JSON.stringify(v.problems)}`);
+    console.log(`verify: healthy=${v.healthy}${v.problems ? " problems=" + JSON.stringify(v.problems) : ""}`);
   });'
