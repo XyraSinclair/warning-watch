@@ -295,6 +295,16 @@ probe (DEZ3583, "defekt", coordinates `[589.28, 3007.11]`) was a thrown error
 instead: the German network went unread for nearly four hours from 13:45 UTC
 and the watchdog paged at the sixth failed poll.
 
+The aircraft feed is a collection too (`adsb.lol`), and a pass fails when any
+of its 16 regions has no sample. adsb.lol refuses requests late in a pass
+(HTTP 429): over 1,379 passes to 5 Oct 2026 none of the first three requests
+was refused, 6% of the sixteenth were, and 37% of passes lost a region, so six
+failed passes in a row paged on 30 Sept and again on 5 Oct 2026. A failed
+region is asked once more at the end of the pass at the same six-second
+spacing, controls first, and only while the pass is under 120 s old; the
+number asked is in the run detail under `asked_again`. A pass that still lacks
+a region fails as before.
+
 Coverage limits are operational facts, not caveats: gamma telemetry is the
 European reporting networks republished by the German BfS service (the JRC's own
 EURDEP value service was stale and partly unavailable when this was built — its

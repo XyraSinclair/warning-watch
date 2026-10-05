@@ -89,24 +89,45 @@ async function collect(db, regions, settings, signal) {
   const sampledAt = new Date(Math.floor(Date.now() / windowMs) * windowMs).toISOString();
   const detail = { sampled_at: sampledAt, sample_minutes: settings.sampleMinutes, regions: [] };
   const results = new Map();
+  const errors = new Map();
+  const startedAt = Date.now();
   let lastFinished = 0;
-  for (const region of regions) {
+  const ask = async (region) => {
     try {
       // adsb.lol rate-limits dynamically. Measured 2026-09-11 from a stable
       // host: 1.2 s spacing was throttled (HTTP 429) after three requests,
       // while six-second spacing sustained a clean run. Pacing is against the
       // previous request's completion, so a slow response also counts.
       await sleep(Math.max(0, 6000 - (Date.now() - lastFinished)), undefined, { signal });
-      const counts = await fetchCounts(region, settings.sampleMinutes, signal);
-      results.set(region.id, counts);
-      detail.regions.push({ region: region.id, aircraft_count: counts.aircraft_count, emergency_count: counts.emergency_count, military_count: counts.military_count });
+      results.set(region.id, await fetchCounts(region, settings.sampleMinutes, signal));
+      errors.delete(region.id);
     } catch (error) {
       // Never retain upstream URLs or response text: they can contain coordinates.
-      detail.regions.push({ region: region.id, unavailable: true, error: error instanceof Error ? error.message.replace(/https?:\/\/\S+/g, '[source URL]') : 'Fetch failed' });
+      errors.set(region.id, error instanceof Error ? error.message.replace(/https?:\/\/\S+/g, '[source URL]') : 'Fetch failed');
     } finally {
       lastFinished = Date.now();
     }
+  };
+  for (const region of regions) {
+    await ask(region);
     if (signal.aborted) break;
+  }
+  // The limit bites late in a pass. Over 1379 passes to 5 Oct 2026 none of the
+  // first three requests was refused, 6% of the sixteenth were, and 37% of
+  // passes lost a region; the request after a refusal was itself refused 8%
+  // of the time. So each failed region is asked once more at the same pacing,
+  // controls first. No second ask starts after 120 s: a pass that slow is
+  // waiting on timeouts, and the stage is killed at 210 s.
+  detail.asked_again = 0;
+  for (const region of regions.filter((entry) => errors.has(entry.id))) {
+    if (signal.aborted || Date.now() - startedAt > 120000) break;
+    await ask(region);
+    detail.asked_again += 1;
+  }
+  for (const region of regions) {
+    const counts = results.get(region.id);
+    if (counts) detail.regions.push({ region: region.id, aircraft_count: counts.aircraft_count, emergency_count: counts.emergency_count, military_count: counts.military_count });
+    else if (errors.has(region.id)) detail.regions.push({ region: region.id, unavailable: true, error: errors.get(region.id) });
   }
   const failedControls = regions.filter((region) => region.role === 'control' && !(results.get(region.id)?.aircraft_count > 0));
   const healthy = failedControls.length === 0 && !signal.aborted;

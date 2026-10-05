@@ -217,8 +217,8 @@ catalogue's timestamps froze at 2024-05-06, roughly sixteen months behind — so
 the BfS mirror is the live path, and it must be watched for its own lag drift.
 ADS-B data come from
 `adsb.lol` under ODbL; attribution is required and the API's rate limits are
-dynamic, so the collector sends at most one request per 1.2 seconds and backs
-off on 429. NRC feeds require a non-browser User-Agent and intermittently deny
+dynamic, so the collector spaces its requests six seconds apart and asks a
+refused region once more at the end of the pass. NRC feeds require a non-browser User-Agent and intermittently deny
 bursts; the registry's backoff covers it. CTBTO's IMS network is restricted by
 treaty and is not used. ProMED moved its reports behind a subscription and is
 not used. EPA RadNet's near-real-time gamma is read from its per-monitor
