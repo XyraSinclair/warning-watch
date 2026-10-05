@@ -102,7 +102,7 @@ function ingestCollection(db, network, result, now = Date.now()) {
     seen.set(p.id, signature);
     // BfS lists probes it cannot place: DEZ3583 arrived on 5 Oct 2026 as
     // "defekt" at [589.28, 3007.11] and, thrown as an error here, cost the
-    // other 1676 German stations nearly four hours. The detector clusters by
+    // other 1676 German stations three and a half hours. The detector clusters by
     // distance, so such a station is named in the run detail and never stored;
     // one already on the roster then counts toward the shortfall.
     if (feature.geometry?.type !== 'Point' || !Array.isArray(coordinates) || !Number.isFinite(coordinates[0]) || !Number.isFinite(coordinates[1]) || Math.abs(coordinates[0]) > 180 || Math.abs(coordinates[1]) > 90) { unplaced.push(p.id); continue; }

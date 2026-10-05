@@ -296,8 +296,8 @@ gets no row, and its id is in that network's run detail under `unplaced_ids`
 already on the roster then counts toward the shortfall, and a poll that
 returns under 80% of its roster still fails as partial. On 5 Oct 2026 one new
 probe (DEZ3583, "defekt", coordinates `[589.28, 3007.11]`) was a thrown error
-instead: the German network went unread for nearly four hours from 13:45 UTC
-and the watchdog paged at the sixth failed poll.
+instead: the German network went unread from 13:45 to 17:10 UTC and the
+watchdog paged at the sixth failed poll.
 
 The aircraft feed is a collection too (`adsb.lol`), and a pass fails when any
 of its 16 regions has no sample. adsb.lol refuses requests late in a pass
