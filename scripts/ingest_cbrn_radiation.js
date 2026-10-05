@@ -85,13 +85,14 @@ function ingestCollection(db, network, result, now = Date.now()) {
   const roster = new Set(db.prepare('SELECT station_id FROM cbrn_stations WHERE source = ?').all(network).map((row) => row.station_id));
   const seen = new Map();
   const rows = [];
+  const unplaced = [];
   const statuses = {};
   let newest = null;
   let invalidReadings = 0;
   for (const feature of result.data.features) {
     const p = feature?.properties;
     const coordinates = feature?.geometry?.coordinates;
-    if (feature?.type !== 'Feature' || !p || typeof p.id !== 'string' || !p.id || typeof p.name !== 'string' || feature.geometry?.type !== 'Point' || !Array.isArray(coordinates) || !Number.isFinite(coordinates[0]) || !Number.isFinite(coordinates[1]) || Math.abs(coordinates[0]) > 180 || Math.abs(coordinates[1]) > 90) throw new Error('Malformed WFS station');
+    if (feature?.type !== 'Feature' || !p || typeof p.id !== 'string' || !p.id || typeof p.name !== 'string') throw new Error('Malformed WFS station');
     // EURDEP repeats identical hourly values across five analysis-window labels.
     const signature = JSON.stringify([coordinates, p.name, p.value, p.unit, p.end_measure, p.site_status, p.site_status_text, p.validated]);
     if (seen.has(p.id)) {
@@ -99,6 +100,12 @@ function ingestCollection(db, network, result, now = Date.now()) {
       continue;
     }
     seen.set(p.id, signature);
+    // BfS lists probes it cannot place: DEZ3583 arrived on 5 Oct 2026 as
+    // "defekt" at [589.28, 3007.11] and, thrown as an error here, cost the
+    // other 1676 German stations nearly four hours. The detector clusters by
+    // distance, so such a station is named in the run detail and never stored;
+    // one already on the roster then counts toward the shortfall.
+    if (feature.geometry?.type !== 'Point' || !Array.isArray(coordinates) || !Number.isFinite(coordinates[0]) || !Number.isFinite(coordinates[1]) || Math.abs(coordinates[0]) > 180 || Math.abs(coordinates[1]) > 90) { unplaced.push(p.id); continue; }
     const quality = JSON.stringify({ site_status: p.site_status ?? null, site_status_text: p.site_status_text ?? null, validated: p.validated ?? null });
     const statusKey = JSON.stringify([p.site_status ?? null, p.site_status_text ?? null]);
     statuses[statusKey] = (statuses[statusKey] || 0) + 1;
@@ -109,10 +116,10 @@ function ingestCollection(db, network, result, now = Date.now()) {
     if (valid && (!newest || observedAt > newest)) newest = observedAt;
     rows.push({ id: p.id, name: p.name, lat: coordinates[1], lon: coordinates[0], country: /^[A-Z]{2}\d+/.test(p.id) ? p.id.slice(0, 2) : null, readings: observedAt ? [{ observedAt, value: p.value, unit: p.unit, quality }] : [] });
   }
-  const returnedKnown = [...roster].filter((id) => seen.has(id)).length;
+  const returnedKnown = rows.filter((row) => roster.has(row.id)).length;
   const partial = roster.size > 0 && returnedKnown < 0.8 * roster.size;
   const stale = !newest || now - Date.parse(newest) > 3 * 3600000;
-  const detail = { features: result.data.features.length, stations: rows.length, readings: rows.length - invalidReadings, invalid_readings: invalidReadings, roster: roster.size, returned_known: returnedKnown, shortfall: roster.size - returnedKnown, partial, stale, newest, bytes: result.bytes, pages: result.pages, content_encoding: result.contentEncoding, wire_bytes: result.wireBytes, statuses };
+  const detail = { features: result.data.features.length, stations: rows.length, readings: rows.length - invalidReadings, invalid_readings: invalidReadings, unplaced: unplaced.length, unplaced_ids: unplaced.slice(0, 10), roster: roster.size, returned_known: returnedKnown, shortfall: roster.size - returnedKnown, partial, stale, newest, bytes: result.bytes, pages: result.pages, content_encoding: result.contentEncoding, wire_bytes: result.wireBytes, statuses };
   return store(db, network, rows, detail);
 }
 

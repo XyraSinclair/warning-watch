@@ -286,6 +286,15 @@ blind radiological instrument must never read as calm. The public picture is at
 <https://warning.watch/>, backed by `/api/status` (no auth, `no-store`,
 public severities only).
 
+A station the BfS service lists without a position on Earth is set aside: it
+gets no row, and its id is in that network's run detail under `unplaced_ids`
+(`cbrn_ingest_runs.detail_json`, and the `radiation-ingest` journal line). One
+already on the roster then counts toward the shortfall, and a poll that
+returns under 80% of its roster still fails as partial. On 5 Oct 2026 one new
+probe (DEZ3583, "defekt", coordinates `[589.28, 3007.11]`) was a thrown error
+instead: the German network went unread for nearly four hours from 13:45 UTC
+and the watchdog paged at the sixth failed poll.
+
 Coverage limits are operational facts, not caveats: gamma telemetry is the
 European reporting networks republished by the German BfS service (the JRC's own
 EURDEP value service was stale and partly unavailable when this was built — its
