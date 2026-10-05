@@ -12,10 +12,11 @@
 //   changed the problem set's hash, and the one real failure (the nightly
 //   self-test) repeated identically four times a day. Nobody acted on it for
 //   ten days. So: each problem is tracked on its own, identified by its text
-//   with the numbers removed; it pages once it has lasted HOLD_MS; it re-pages
-//   every 6 h on its first day and daily after that, at urgent priority, with
-//   its age in the title. A problem is over only after CLEAR_MS of absence, so
-//   a flapping failure can neither storm nor hide.
+//   before any parenthesis with the numbers removed; it pages once it has
+//   lasted HOLD_MS; it re-pages every 6 h on its first day and daily after
+//   that, at urgent priority, with its age in the title. A problem is over
+//   only after CLEAR_MS of absence, so a flapping failure can neither storm
+//   nor hide.
 // - Sends one recovery note when every paged problem has cleared.
 
 const fs = require('node:fs');
@@ -30,8 +31,13 @@ const DAY_MS = 24 * HOUR_MS;
 const HOLD_MS = 3 * MINUTE_MS;
 const CLEAR_MS = 10 * MINUTE_MS;
 
+// The text before the first parenthesis names the problem; what follows is
+// that run's measurement or the collector's last error, which changes while
+// the problem stays. On 2 Oct 2026 one EURDEP outage paged seven times in 21
+// hours where this schedule allows four: its detail flipped between
+// stale=false and stale=true, and each flip was a new problem.
 function problemKey(text) {
-  return String(text).replace(/\d+(\.\d+)?/g, '#');
+  return String(text).replace(/ \(.*$/s, '').replace(/\d+(\.\d+)?/g, '#');
 }
 
 function formatAge(ms) {

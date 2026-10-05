@@ -56,7 +56,11 @@ inside a minute, the next live probe sent the recovery note.
 
 A page must mean something, so the schedule is per problem (`decide` in
 `ops_alert.js`, pure, runnable on a fake clock). A problem is identified by its
-text with the numbers removed. It pages once it has lasted 3 minutes, again
+text before the first parenthesis, with the numbers removed: a parenthesis
+holds that run's measurement or the collector's last error, which changes
+while the problem stays. On 2 Oct 2026 one EURDEP outage paged seven times in
+21 hours where the schedule allows four, because that detail flipped between
+`stale=false` and `stale=true`. It pages once it has lasted 3 minutes, again
 every 6 hours through its first day, then at 24 hours and daily after at
 `urgent` priority with its age in the title. It is over only after 10 minutes
 of absence, so a flapping failure neither storms nor hides, and a one-run blip
