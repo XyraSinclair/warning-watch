@@ -74,12 +74,15 @@ function readRadiation(db) {
 }
 
 function readCbrnAircraft(db) {
-  if (!db) return { regions: 0, newestSample: null, ageMinutes: null };
+  if (!db) return { regions: 0, newestSample: null, ageMinutes: null, newestPass: null };
   try {
     const row = db.prepare("SELECT COUNT(DISTINCT region) AS regions, MAX(sampled_at) AS newestSample FROM cbrn_aircraft_slots").get();
-    return { regions: row?.regions ?? 0, newestSample: row?.newestSample ?? null, ageMinutes: minutesSince(row?.newestSample) };
+    // A pass stamps its end whether or not adsb.lol answered; a sample exists
+    // only when a control region did. The off-box dead-man reads the pass.
+    const pass = db.prepare("SELECT last_attempt_at AS endedAt FROM cbrn_ingest_runs WHERE source = 'adsb.lol'").get();
+    return { regions: row?.regions ?? 0, newestSample: row?.newestSample ?? null, ageMinutes: minutesSince(row?.newestSample), newestPass: pass?.endedAt ?? null };
   } catch {
-    return { regions: 0, newestSample: null, ageMinutes: null };
+    return { regions: 0, newestSample: null, ageMinutes: null, newestPass: null };
   }
 }
 

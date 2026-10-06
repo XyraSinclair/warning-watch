@@ -39,16 +39,24 @@ The off-box dead-man (`config/deadman/`) runs on a second machine of ours as a u
 every two minutes: it fetches `https://warning.watch/api/status` and pages a
 public ntfy.sh topic under two names. Down, at `urgent`: two consecutive
 fetches fail or the payload is unreadable, so an outage pages inside five
-minutes. Stalled, at `high`: the site answers and `aircraft.newestSample` is
-older than 14 minutes. The CBRN timer cuts a sample every 5 minutes, a run
-lands it up to 4 minutes after its slot (median 100 s; 188 s on 6 Oct 2026
-with adsb.lol slow and no second ask made, and a pass that asks again is
-held to 180 s after its radiation poll), and the ingest writes nothing when
-both control regions are unreachable at adsb.lol, so one missing sample is
-the feed and two are a stall; a stall pages inside eighteen minutes of the
-last sample. At the
-earlier 7-minute bound one skipped sample paged "DOWN" at `urgent` while the
-site was answering (twice on 29 Sept 2026, 2 of 198 runs). It pages on the
+minutes. Stalled, at `high`: the site answers and `aircraft.newestPass` is
+older than 14 minutes. The CBRN timer starts a pass every 5 minutes, and the
+aircraft ingest stamps its end up to 4 minutes after its slot (median 105 s
+and slowest 209 s over the 24 hours to 18:00 UTC on 6 Oct 2026, a day
+adsb.lol was slow; a pass that asks again is held to 180 s after its
+radiation poll) whether or not adsb.lol answered. So one missing pass is a
+deploy holding the lock or a killed stage and two are a stall; a stall pages
+inside eighteen minutes of the last pass. The feed is not the dead-man's to
+page: a feed that will not answer is in the box's verdict after six failed
+passes, and the box is alive to send it. What this gives up is a feed outage
+while the box's watchdog is itself dead. The first rule read
+`aircraft.newestSample`, which the ingest does not write when both control
+regions are unreachable at adsb.lol. At a 7-minute bound one skipped sample
+paged "DOWN" at `urgent` while the site was answering (twice on 29 Sept 2026,
+2 of 198 runs), and at 13 minutes two passes in a row that timed out on both
+controls paged a stall on 6 Oct 2026 while every pass ran on time: of 7,393
+slots since 11 Sept nine have no sample, and those two are the only pair. It
+pages on the
 transition, again when a stall becomes an outage, every 6 hours while either
 holds, and sends one recovery note. The topic URL lives only in
 `~/.config/warning-watch/deadman.env` on that machine, never in this repo; the
