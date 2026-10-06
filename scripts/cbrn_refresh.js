@@ -73,16 +73,19 @@ function loadState() {
 function run(commandArgs, timeoutMs) {
   const remaining = RUN_DEADLINE_MS - (Date.now() - startedAt);
   if (remaining <= 0) throw new Error('CBRN refresh deadline exceeded');
+  const timeout = Math.min(remaining, timeoutMs);
   return spawnSync(process.execPath, commandArgs, {
     cwd: ROOT_DIR,
     encoding: 'utf8',
-    timeout: Math.min(remaining, timeoutMs),
+    timeout,
     killSignal: 'SIGKILL',
     env: {
       ...process.env,
       EWS_DB_PATH: MAIN_DB,
       EWS_CBRN_DB_PATH: CBRN_DB,
       EWS_WATCH_DB_PATH: WATCH_DB,
+      // The kill is SIGKILL, so a stage that paces its own work is told when.
+      EWS_STAGE_KILL_AT: String(Date.now() + timeout),
     },
   });
 }

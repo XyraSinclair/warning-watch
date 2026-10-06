@@ -40,11 +40,13 @@ every two minutes: it fetches `https://warning.watch/api/status` and pages a
 public ntfy.sh topic under two names. Down, at `urgent`: two consecutive
 fetches fail or the payload is unreadable, so an outage pages inside five
 minutes. Stalled, at `high`: the site answers and `aircraft.newestSample` is
-older than 13 minutes. The CBRN timer cuts a sample every 5 minutes, a run
-lands it up to 3 minutes after its slot (median 100 s, slowest 179 s on
-29 Sept 2026), and the ingest writes nothing when both control regions are
-unreachable at adsb.lol, so one missing sample is the feed and two are a
-stall; a stall pages inside seventeen minutes of the last sample. At the
+older than 14 minutes. The CBRN timer cuts a sample every 5 minutes, a run
+lands it up to 4 minutes after its slot (median 100 s; 188 s on 6 Oct 2026
+with adsb.lol slow and no second ask made, and a pass that asks again is
+held to 180 s after its radiation poll), and the ingest writes nothing when
+both control regions are unreachable at adsb.lol, so one missing sample is
+the feed and two are a stall; a stall pages inside eighteen minutes of the
+last sample. At the
 earlier 7-minute bound one skipped sample paged "DOWN" at `urgent` while the
 site was answering (twice on 29 Sept 2026, 2 of 198 runs). It pages on the
 transition, again when a stall becomes an outage, every 6 hours while either
@@ -305,9 +307,16 @@ of its 16 regions has no sample. adsb.lol refuses requests late in a pass
 was refused, 6% of the sixteenth were, and 37% of passes lost a region, so six
 failed passes in a row paged on 30 Sept and again on 5 Oct 2026. A failed
 region is asked once more at the end of the pass at the same six-second
-spacing, controls first, and only while the pass is under 120 s old; the
-number asked is in the run detail under `asked_again`. A pass that still lacks
-a region fails as before.
+spacing, controls first; the number asked is in the run detail under
+`asked_again`. A second ask starts only if its worst case, 21 s, ends 30 s
+before the stage is killed, a time the refresh hands every stage as
+`EWS_STAGE_KILL_AT`. The first rule stopped second asks once the pass was
+120 s old, and a sweep is 90 s of spacing alone, so one 15 s timeout or a slow
+feed spent the allowance. Of 241 passes from 17:35 UTC on 5 Oct to 13:35 UTC
+on 6 Oct 2026, 100 asked again and 94 of those ended whole; 18 of the 24 that
+lost a region asked nothing again, all 19 timed-out regions among them, and
+six such passes in a row paged on 6 Oct. A pass that still lacks a region
+fails as before.
 
 Coverage limits are operational facts, not caveats: gamma telemetry is the
 European reporting networks republished by the German BfS service (the JRC's own

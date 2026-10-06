@@ -12,9 +12,14 @@ const { SPECIAL_TYPES } = require('./detect_cbrn_airspace');
 const ROOT = path.resolve(__dirname, '..');
 const USER_AGENT = 'Warning.watch/1.0 (https://warning.watch; CBRN public-source watch)';
 const MAX_BYTES = 2 * 1024 * 1024;
+const SPACING_MS = 6000;
+const FETCH_TIMEOUT_MS = 15000;
 
 function options(argv) {
   const result = { db: process.env.EWS_CBRN_DB_PATH, eventsDb: process.env.EWS_DB_PATH, regions: path.join(ROOT, 'config/cbrn-regions.json'), sampleMinutes: 5, once: false };
+  // cbrn_refresh.js tells each stage when it will be killed; a run by hand has no such time.
+  result.killAt = process.env.EWS_STAGE_KILL_AT === undefined ? Infinity : Number(process.env.EWS_STAGE_KILL_AT);
+  if (Number.isNaN(result.killAt)) throw new Error('EWS_STAGE_KILL_AT must be epoch milliseconds.');
   const names = { '--db': 'db', '--events-db': 'eventsDb', '--regions': 'regions', '--sample-minutes': 'sampleMinutes' };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -46,7 +51,7 @@ function loadRegions(filename) {
 }
 
 async function fetchCounts(region, sampleMinutes, signal) {
-  const timeout = AbortSignal.timeout(15000);
+  const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
   const response = await fetch(`https://api.adsb.lol/v2/point/${region.lat}/${region.lon}/${region.radius_nm}`, {
     headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
     signal: AbortSignal.any([signal, timeout]),
@@ -90,7 +95,6 @@ async function collect(db, regions, settings, signal) {
   const detail = { sampled_at: sampledAt, sample_minutes: settings.sampleMinutes, regions: [] };
   const results = new Map();
   const errors = new Map();
-  const startedAt = Date.now();
   let lastFinished = 0;
   const ask = async (region) => {
     try {
@@ -98,7 +102,7 @@ async function collect(db, regions, settings, signal) {
       // host: 1.2 s spacing was throttled (HTTP 429) after three requests,
       // while six-second spacing sustained a clean run. Pacing is against the
       // previous request's completion, so a slow response also counts.
-      await sleep(Math.max(0, 6000 - (Date.now() - lastFinished)), undefined, { signal });
+      await sleep(Math.max(0, SPACING_MS - (Date.now() - lastFinished)), undefined, { signal });
       results.set(region.id, await fetchCounts(region, settings.sampleMinutes, signal));
       errors.delete(region.id);
     } catch (error) {
@@ -116,11 +120,17 @@ async function collect(db, regions, settings, signal) {
   // first three requests was refused, 6% of the sixteenth were, and 37% of
   // passes lost a region; the request after a refusal was itself refused 8%
   // of the time. So each failed region is asked once more at the same pacing,
-  // controls first. No second ask starts after 120 s: a pass that slow is
-  // waiting on timeouts, and the stage is killed at 210 s.
+  // controls first. A second ask starts only if its worst case, the spacing
+  // and a full timeout, ends 30 s before the stage is killed: a kill loses the
+  // whole sample, and the detectors after this stage take up to 12 s of the
+  // same run. The first rule stopped at 120 s from the start of the pass, and
+  // a sweep is 90 s of spacing alone, so one timeout or a slow feed spent it:
+  // of 241 passes to 13:35 UTC on 6 Oct 2026, 18 of the 24 that lost a region
+  // asked nothing again, all 19 timed-out regions among them, and six such
+  // passes in a row paged.
   detail.asked_again = 0;
   for (const region of regions.filter((entry) => errors.has(entry.id))) {
-    if (signal.aborted || Date.now() - startedAt > 120000) break;
+    if (signal.aborted || Date.now() + SPACING_MS + FETCH_TIMEOUT_MS + 30000 > settings.killAt) break;
     await ask(region);
     detail.asked_again += 1;
   }

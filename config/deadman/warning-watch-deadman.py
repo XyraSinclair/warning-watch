@@ -9,7 +9,7 @@ Down: the site does not answer. Two consecutive fetch failures (a single
 failure is the network), a non-200, or an unparseable payload. Urgent.
 
 Stalled: the site answers and its newest aircraft sample is older than
-STALE_MINUTES. Samples are cut every five minutes and land up to three minutes
+STALE_MINUTES. Samples are cut every five minutes and land up to four minutes
 after their slot, and the ingest writes nothing when its control regions are
 unreachable, so one missing sample is the upstream feed and two are a stall.
 High.
@@ -31,7 +31,7 @@ STATUS_URL = os.environ.get("DEADMAN_STATUS_URL", "https://warning.watch/api/sta
 NTFY_URL = os.environ.get("DEADMAN_NTFY_URL", "").strip()
 STATE_PATH = os.environ.get("DEADMAN_STATE", os.path.expanduser("~/.local/state/warning-watch-deadman.json"))
 SAMPLE_MINUTES = 5  # warning-watch-cbrn.timer
-LANDING_MINUTES = 3  # slowest run measured 29 Sept 2026: 179 s, median 100 s
+LANDING_MINUTES = 4  # median 100 s; 188 s on 6 Oct 2026 with adsb.lol slow; a pass that asks regions again ends 180 s after its radiation poll
 STALE_MINUTES = 2 * SAMPLE_MINUTES + LANDING_MINUTES
 FAILURES_TO_PAGE = 2
 REPAGE_HOURS = 6
