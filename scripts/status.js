@@ -185,8 +185,12 @@ function watchReport() {
     const snapshot = getWatchSnapshot(db, { internal: true, limit: 1 });
     const lastRunAgeMinutes = snapshot.run.lastFinishedAt
       ? Math.round((Date.now() - Date.parse(snapshot.run.lastFinishedAt)) / 60000) : null;
+    // A check that succeeded with a lane missing is degraded without a check
+    // error: name the lane and what it hit, so the page says what failed.
+    const gapDetail = (metadata) => metadata?.incompleteLanes?.length
+      ? metadata.incompleteLanes.map((lane) => `${lane.lane} lane: ${lane.message}`).join('; ') : null;
     const sourceProblems = snapshot.sources.filter((source) => source.enabled && source.health !== 'healthy')
-      .map((source) => ({ id: source.id, health: source.health, error: source.lastError, recovery: source.recovery }));
+      .map((source) => ({ id: source.id, health: source.health, error: source.lastError ?? gapDetail(source.metadata), recovery: source.recovery }));
     const services = process.platform === 'darwin' ? [] : [
       systemdState('warning-watch-sources.timer'), systemdState('warning-watch-sources.service'),
     ];

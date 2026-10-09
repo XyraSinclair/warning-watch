@@ -12,11 +12,14 @@
 //   changed the problem set's hash, and the one real failure (the nightly
 //   self-test) repeated identically four times a day. Nobody acted on it for
 //   ten days. So: each problem is tracked on its own, identified by its text
-//   before any parenthesis with the numbers removed; it pages once it has
-//   lasted HOLD_MS; it re-pages every 6 h on its first day and daily after
+//   before any parenthesis with the numbers removed; it pages once it is
+//   HOLD_MS old and has been present at half or more of the checks since it
+//   was first seen; it re-pages every 6 h on its first day and daily after
 //   that, at urgent priority, with its age in the title. A problem is over
 //   only after CLEAR_MS of absence, so a flapping failure can neither storm
-//   nor hide.
+//   nor hide. Age alone is not presence: on 9 Oct 2026 one NWS history page
+//   failed at two checks twelve minutes apart, five healthy checks between
+//   them, and that paged as a twelve-minute outage.
 // - Sends one recovery note when every paged problem has cleared.
 
 const fs = require('node:fs');
@@ -46,22 +49,32 @@ function formatAge(ms) {
   return `${Math.max(1, Math.round(ms / MINUTE_MS))}m`;
 }
 
+function formatPresence(record, nowMs) {
+  const age = formatAge(nowMs - record.firstSeenMs);
+  return record.present === record.checks ? `for ${age}` : `at ${record.present} of ${record.checks} checks over ${age}`;
+}
+
 // Pure: (previous state, the problems seen now, the time) -> next state and
 // at most one page. Kept free of I/O so the schedule can be run on a fake clock.
 function decide(previous, problemTexts, nowMs) {
   const records = { ...(previous.problems || {}) };
+  const seen = new Set();
   for (const text of problemTexts) {
     const key = problemKey(text);
-    records[key] = { firstSeenMs: nowMs, lastPagedMs: null, ...records[key], text, lastSeenMs: nowMs };
+    records[key] = { firstSeenMs: nowMs, lastPagedMs: null, checks: 0, present: 0, ...records[key], text, lastSeenMs: nowMs };
+    seen.add(key);
   }
   const recovered = [];
   for (const [key, record] of Object.entries(records)) {
     if (nowMs - record.lastSeenMs >= CLEAR_MS) {
       if (record.lastPagedMs) recovered.push(record);
       delete records[key];
+    } else {
+      record.checks += 1;
+      if (seen.has(key)) record.present += 1;
     }
   }
-  const open = Object.values(records).filter((record) => nowMs - record.firstSeenMs >= HOLD_MS);
+  const open = Object.values(records).filter((record) => nowMs - record.firstSeenMs >= HOLD_MS && record.present * 2 >= record.checks);
   const present = open.filter((record) => record.lastSeenMs === nowMs);
   const due = present.filter((record) => {
     if (!record.lastPagedMs) return true;
@@ -81,7 +94,7 @@ function decide(previous, problemTexts, nowMs) {
       priority: oldestMs >= DAY_MS ? 'urgent' : 'high',
       body: [
         'Warning Watch on xyra-dev-hetzner:',
-        ...listed.map((record) => `- ${record.text} (for ${formatAge(nowMs - record.firstSeenMs)})`),
+        ...listed.map((record) => `- ${record.text} (${formatPresence(record, nowMs)})`),
         '',
         oldestMs >= DAY_MS
           ? 'This has outlasted every automatic repair. It needs a person. It will page daily until it clears.'
