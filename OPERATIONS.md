@@ -309,6 +309,19 @@ probe (DEZ3583, "defekt", coordinates `[589.28, 3007.11]`) was a thrown error
 instead: the German network went unread from 13:45 to 17:10 UTC and the
 watchdog paged at the sixth failed poll.
 
+A network the ingest cannot read at all — an HTTP error, or pages that do not
+add up to the server's `numberMatched` — is a failed collection in its run
+record, counted toward the bound of six as a partial or stale poll is; the
+stage fails only when it cannot run. Until 10 Oct 2026 such a read also failed
+the stage, which paged inside four minutes for one 30-minute poll of one
+network while the other two reported, and a longer outage was a fresh problem
+to the watchdog at every failed poll. The latest-value views move while they
+are read, as an hour's values land: at 15:05 UTC on 10 Oct 2026 EURDEP grew
+from 17,239 to 17,883 rows between the first page and the last, the one such
+read in 220 polls since 5 Oct, so a read whose pages do not sum is taken once
+more from the start (`reads` in the run detail) and only a second mismatch
+fails the poll.
+
 The aircraft feed is a collection too (`adsb.lol`), and a pass fails when any
 of its 16 regions has no sample. adsb.lol refuses requests late in a pass
 (HTTP 429): over 1,379 passes to 5 Oct 2026 none of the first three requests

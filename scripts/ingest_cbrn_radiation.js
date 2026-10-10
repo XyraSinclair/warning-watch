@@ -40,8 +40,14 @@ function options(argv) {
 // The BfS WFS returns at most 1000 features per request whatever count asks
 // for (measured 2026-10-03; EURDEP is 17085 rows, five window labels per
 // station), so every network is read in id-sorted pages, four at a time, and
-// the pages must add up to the server's own numberMatched.
+// the pages must add up to the server's own numberMatched: fewer is a
+// truncated read. The latest-value views also move while they are read, as an
+// hour's values land: at 15:05 UTC on 10 Oct 2026 EURDEP grew from 17239 to
+// 17883 rows between the first page and the last, the one such read in 220
+// polls since 5 Oct. A read whose pages do not sum is taken once more from the
+// start, and only a second mismatch fails the poll.
 const PAGE = 1000;
+const READS = 2;
 
 async function fetchPage(network, startIndex) {
   const url = new URL('https://www.imis.bfs.de/ogc/opendata/ows');
@@ -61,24 +67,26 @@ async function fetchPage(network, startIndex) {
 }
 
 async function fetchNetwork(network) {
-  const first = await fetchPage(network, 0);
-  const matched = first.data.numberMatched;
-  if (!matched || matched > MAX_FEATURES) throw new Error(`WFS numberMatched ${matched} is empty or oversized`);
-  const starts = [];
-  for (let start = PAGE; start < matched; start += PAGE) starts.push(start);
-  const pages = [first, ...new Array(starts.length)];
-  let next = 0;
-  const worker = async () => {
-    while (next < starts.length) {
-      const index = next;
-      next += 1;
-      pages[index + 1] = await fetchPage(network, starts[index]);
-    }
-  };
-  await Promise.all(Array.from({ length: 4 }, worker));
-  const features = pages.flatMap((page) => page.data.features);
-  if (features.length !== matched) throw new Error(`WFS pages returned ${features.length} of ${matched} features`);
-  return { data: { type: 'FeatureCollection', features }, bytes: pages.reduce((sum, page) => sum + page.bytes, 0), pages: pages.length, contentEncoding: first.contentEncoding, wireBytes: first.wireBytes };
+  for (let read = 1; ; read += 1) {
+    const first = await fetchPage(network, 0);
+    const matched = first.data.numberMatched;
+    if (!matched || matched > MAX_FEATURES) throw new Error(`WFS numberMatched ${matched} is empty or oversized`);
+    const starts = [];
+    for (let start = PAGE; start < matched; start += PAGE) starts.push(start);
+    const pages = [first, ...new Array(starts.length)];
+    let next = 0;
+    const worker = async () => {
+      while (next < starts.length) {
+        const index = next;
+        next += 1;
+        pages[index + 1] = await fetchPage(network, starts[index]);
+      }
+    };
+    await Promise.all(Array.from({ length: 4 }, worker));
+    const features = pages.flatMap((page) => page.data.features);
+    if (features.length === matched) return { data: { type: 'FeatureCollection', features }, bytes: pages.reduce((sum, page) => sum + page.bytes, 0), pages: pages.length, reads: read, contentEncoding: first.contentEncoding, wireBytes: first.wireBytes };
+    if (read === READS) throw new Error(`WFS pages returned ${features.length} of ${matched} features on read ${read}`);
+  }
 }
 
 function ingestCollection(db, network, result, now = Date.now()) {
@@ -119,7 +127,7 @@ function ingestCollection(db, network, result, now = Date.now()) {
   const returnedKnown = rows.filter((row) => roster.has(row.id)).length;
   const partial = roster.size > 0 && returnedKnown < 0.8 * roster.size;
   const stale = !newest || now - Date.parse(newest) > 3 * 3600000;
-  const detail = { features: result.data.features.length, stations: rows.length, readings: rows.length - invalidReadings, invalid_readings: invalidReadings, unplaced: unplaced.length, unplaced_ids: unplaced.slice(0, 10), roster: roster.size, returned_known: returnedKnown, shortfall: roster.size - returnedKnown, partial, stale, newest, bytes: result.bytes, pages: result.pages, content_encoding: result.contentEncoding, wire_bytes: result.wireBytes, statuses };
+  const detail = { features: result.data.features.length, stations: rows.length, readings: rows.length - invalidReadings, invalid_readings: invalidReadings, unplaced: unplaced.length, unplaced_ids: unplaced.slice(0, 10), roster: roster.size, returned_known: returnedKnown, shortfall: roster.size - returnedKnown, partial, stale, newest, bytes: result.bytes, pages: result.pages, reads: result.reads, content_encoding: result.contentEncoding, wire_bytes: result.wireBytes, statuses };
   return store(db, network, rows, detail);
 }
 
@@ -226,13 +234,19 @@ async function main() {
         return true;
       }).immediate();
       if (!allowed) { results.push({ network, skipped: 'cadence' }); continue; }
+      // A network that cannot be read is a failed collection, counted in its
+      // run record and paged by the status verdict at the sixth in a row, as
+      // a partial or stale poll is. Until 10 Oct 2026 it also failed the stage,
+      // which paged inside four minutes for one 30-minute poll of one network
+      // while the other two reported, and a longer outage was a fresh problem
+      // to the watchdog at every failed poll. The stage fails only when it
+      // cannot run.
       try { results.push(network === 'radnet' ? ingestRadnet(db, await fetchRadnet(settings.months)) : ingestCollection(db, network, await fetchNetwork(network))); }
       catch (error) {
         const roster = db.prepare('SELECT COUNT(*) AS n FROM cbrn_stations WHERE source = ?').get(network).n;
         const detail = { roster, returned_known: 0, shortfall: roster, failed: true };
         recordIngestRun(db, { source: network, ok: false, error: error.message, detail });
         results.push({ network, ok: false, error: error.message, ...detail });
-        process.exitCode = 1;
       }
     }
     console.log(JSON.stringify({ networks: results }));
