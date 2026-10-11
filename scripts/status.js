@@ -190,9 +190,10 @@ function watchReport() {
     const gapDetail = (metadata) => metadata?.incompleteLanes?.length
       ? metadata.incompleteLanes.map((lane) => `${lane.lane} lane: ${lane.message}`).join('; ') : null;
     // Unhealthy means no complete read inside the source's own tolerance: say how long.
+    const age = (ms) => ms < 120 * 60000 ? `${Math.round(ms / 60000)}m` : ms < 72 * 3600000 ? `${Math.round(ms / 3600000)}h` : `${Math.round(ms / 86400000)}d`;
     const unread = (source) => source.lastCompleteAt == null ? 'never read completely'
       : Date.now() - Date.parse(source.lastCompleteAt) > source.staleSeconds * 1000
-        ? `${Math.round((Date.now() - Date.parse(source.lastCompleteAt)) / 60000)}m since a complete read` : null;
+        ? `${age(Date.now() - Date.parse(source.lastCompleteAt))} since a complete read` : null;
     const sourceProblems = snapshot.sources.filter((source) => source.enabled && source.health !== 'healthy')
       .map((source) => ({ id: source.id, health: source.health, error: [unread(source), source.lastError ?? gapDetail(source.metadata)].filter(Boolean).join('; ') || null, recovery: source.recovery }));
     const services = process.platform === 'darwin' ? [] : [
