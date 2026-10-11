@@ -220,6 +220,18 @@ function openWatchDb(filename = process.env.EWS_WATCH_DB_PATH || path.join(__dir
       db.pragma("user_version = 4");
     }).immediate();
   }
+  if (db.pragma("user_version", { simple: true }) < 5) {
+    db.transaction(() => {
+      // complete_at is the newest read that covered the whole source (both NWS
+      // lanes). success_at also advances on a partial read, so it cannot say how
+      // long a source has gone unread.
+      db.exec(`
+        ALTER TABLE watch_sources ADD COLUMN complete_at INTEGER;
+        UPDATE watch_sources SET complete_at=success_at;
+        PRAGMA user_version=5;
+      `);
+    }).immediate();
+  }
   return db;
 }
 function syncSources(db, definitions, now = Date.now()) {
@@ -425,7 +437,8 @@ function recordSourceResult(db, sourceId, result, now = Date.now(), { startedAt 
     const retryDelay = sourceId === "nws-civil-alerts" && sourceMetadata?.sourceGap === true
       && (sourceMetadata.rateLimited === true || (Number.isFinite(sourceMetadata.retryAfterMs) && sourceMetadata.retryAfterMs > 0))
       ? now + Math.max(definition.pollSeconds * 1000, Math.min(30 * DAY, sourceMetadata.retryAfterMs || 0)) : null;
-    sql(db, "UPDATE watch_sources SET checked_at=?,success_at=?,observed_at=?,baseline_at=COALESCE(baseline_at,?),last_error=NULL,error_code=NULL,http_status=NULL,consecutive_failures=0,next_check_at=?,retry_after_until=?,observation_count=observation_count+?,cursor=COALESCE(?,cursor),metadata=? WHERE id=?").run(startedAt, now, observed, now, retryDelay, retryDelay, counts.inserted, cursor, metadata, sourceId);
+    const complete = sourceMetadata?.sourceGap === true ? source.complete_at : now;
+    sql(db, "UPDATE watch_sources SET checked_at=?,success_at=?,complete_at=?,observed_at=?,baseline_at=COALESCE(baseline_at,?),last_error=NULL,error_code=NULL,http_status=NULL,consecutive_failures=0,next_check_at=?,retry_after_until=?,observation_count=observation_count+?,cursor=COALESCE(?,cursor),metadata=? WHERE id=?").run(startedAt, now, complete, observed, now, retryDelay, retryDelay, counts.inserted, cursor, metadata, sourceId);
     return counts;
   }).immediate();
 }
@@ -697,14 +710,21 @@ function getWatchSnapshot(db, { internal = false, limit = 40, status = "all", cu
   }
   const sources = sql(db, "SELECT * FROM watch_sources ORDER BY enabled DESC,id").all().map((row) => {
     const definition = parse(row.definition);
-    let health = !definition.enabled ? "disabled" : row.last_error ? "degraded" : row.success_at == null ? "warming" : now - row.success_at > definition.staleSeconds * 1000 ? "stale" : "healthy";
     const metadata = row.metadata ? parse(row.metadata) : null;
+    // Healthy while a complete read is younger than the definition's staleSeconds,
+    // the tolerance the source declares, not the luck of its latest poll: in the
+    // week to 12 Oct 2026 api.weather.gov answered HTTP 500 for one NWS lane or
+    // both at 29 moments, each over inside one or two watchdog checks against a
+    // 2-minute poll and a 15-minute tolerance, and two of them paged.
+    let health = !definition.enabled ? "disabled"
+      : row.complete_at != null && now - row.complete_at <= definition.staleSeconds * 1000 ? "healthy"
+      : row.last_error || metadata?.sourceGap === true ? "degraded"
+      : row.complete_at == null ? "warming" : "stale";
     const sampled = Boolean(sql(db, "SELECT 1 FROM watch_items h JOIN watch_evidence e ON e.id=h.evidence_id WHERE h.source_id=? AND json_extract(e.observation,'$.kind')!='report' LIMIT 1").get(row.id));
     const sampleAt = sampled && definition.sampleStaleSeconds != null && metadata?.sourceUpdatedAt == null ? sql(db, "SELECT MAX(COALESCE(json_extract(e.observation,'$.publishedAt'),json_extract(e.observation,'$.occurredAt'))) AS at FROM watch_items h JOIN watch_evidence e ON e.id=h.evidence_id WHERE h.source_id=? AND json_extract(e.observation,'$.kind')!='report'").get(row.id).at : null;
     const upstreamAt = Date.parse(metadata?.sourceUpdatedAt ?? sampleAt ?? "");
     if (health === "healthy" && (sampled || metadata?.sourceUpdatedAt != null) && definition.sampleStaleSeconds != null && (!Number.isFinite(upstreamAt) || upstreamAt > now + 300000 || now - upstreamAt > definition.sampleStaleSeconds * 1000)) health = "stale";
-    if (health === "healthy" && metadata?.sourceGap === true) health = "degraded";
-    return { ...definition, health, lastCheckedAt: iso(row.checked_at), lastSuccessAt: iso(row.success_at), lastObservedAt: iso(row.observed_at), lastError: internal ? row.last_error : row.last_error ? "Source check failed; previous evidence retained." : null, observationCount: row.observation_count, baselineSince: iso(row.baseline_at), metadata, recovery: { code: row.error_code, httpStatus: row.http_status, consecutiveFailures: row.consecutive_failures, nextCheckAt: iso(row.next_check_at) } };
+    return { ...definition, health, lastCheckedAt: iso(row.checked_at), lastSuccessAt: iso(row.success_at), lastCompleteAt: iso(row.complete_at), lastObservedAt: iso(row.observed_at), lastError: internal ? row.last_error : row.last_error ? "Source check failed; previous evidence retained." : null, observationCount: row.observation_count, baselineSince: iso(row.baseline_at), metadata, recovery: { code: row.error_code, httpStatus: row.http_status, consecutiveFailures: row.consecutive_failures, nextCheckAt: iso(row.next_check_at) } };
   });
   const run = sql(db, "SELECT * FROM watch_run WHERE id=1").get();
   const handover = run.summary ? parse(run.summary) : {};

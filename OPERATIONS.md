@@ -81,6 +81,17 @@ The reason is the record: in the two weeks to 19 Sept 2026 the old
 hash-of-the-whole-set rule sent about 150 pages (a false pair every night while
 the backup was mid-write, bursts every two minutes from a minute counter in the
 text), and the one real failure inside them went unacted-on for ten days.
+A watch source is unhealthy when no complete read has landed inside its own
+`staleSeconds`, not when its latest poll failed: NWS civil alerts polls every
+2 minutes with a 15-minute tolerance, so one failed poll or one failed lane of
+two is a healthy source until the tolerance runs out, and the verdict then
+says how many minutes since the last complete read. In the week to 12 Oct 2026
+api.weather.gov answered HTTP 500 at 29 moments, 33 of 3,464 watchdog checks,
+every one over inside one or two checks and most on one lane while the other
+read fine; two of them paged (04:32 UTC on 9 Oct, 23:04 UTC on 11 Oct) because
+the source read `degraded` on a single poll and two blips six minutes apart met
+the half-of-checks rule. `complete_at` on `watch_sources` is the newest read
+that covered the whole source.
 
 Continuation work is tracked as beads: `br ready` lists what is unblocked
 (see ROADMAP.md for the full arc).
