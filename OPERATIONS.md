@@ -1025,7 +1025,12 @@ the upstream reference site.
   readsb writes a callsign record into the same shape with
   `lat = (1 << 30) | squawk`, the squawk in decimal, so a record whose lat
   field is at or above 2^30 is a callsign record and squawk 0000 sits exactly
-  on 2^30. Until 2026-10-14 every parser of the format (`parse_heatmap.py`,
+  on 2^30. The test reads the field signed: a southern-hemisphere position
+  has a negative lat whose sign bit puts it at or above 2^30 unsigned, and
+  the non-ICAO tracker read it unsigned until 2026-10-14, taking such a
+  position for a callsign record (94 of 3.76M non-ICAO positions in 687 of
+  the 4,117 cached files, all in the 08:00 UTC slot of 14 Oct). Until
+  2026-10-14 every parser of the format (`parse_heatmap.py`,
   `track_non_icao_hex.py`, the three masters research scripts) tested strictly
   above 2^30 and read squawk-0000 callsign records as positions at latitude
   1073.74: 27.1M of 1.11B callsign records across the 4,117 cached files

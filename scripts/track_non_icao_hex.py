@@ -251,7 +251,6 @@ def parse_non_icao_heatmap(filename):
                 index += 4
                 continue
 
-            point1_u = int(points_u[index + 1])
             point1 = int(points[index + 1])
             point2 = int(points[index + 2])
             hex_value = point_to_non_icao_hex(point0_u)
@@ -260,9 +259,9 @@ def parse_non_icao_heatmap(filename):
             key = (hex_value, message_type)
             summary = summaries.setdefault(key, new_summary(hex_value, message_type))
 
-            if point1_u >= 1073741824:
+            if point1 >= 1073741824:
                 flight = decode_callsign(points_u8, 4 * (index + 2))
-                squawk = str(point1_u & 0xFFFF).zfill(4)
+                squawk = str(point1 & 0xFFFF).zfill(4)
                 summary["flight"] = summary["flight"] or flight
                 summary["squawk"] = summary["squawk"] or squawk
                 summary["observation_count"] += 1
@@ -373,8 +372,7 @@ def parse_non_icao_metric_heatmap(filename):
             message_type_counts[message_type] += 1
             observation_count += 1
 
-            point1_u = int(points_u[index + 1])
-            if point1_u >= 1073741824:
+            if int(points[index + 1]) >= 1073741824:
                 index += 4
                 continue
 
@@ -681,12 +679,11 @@ def parse_latest_non_icao_snapshot(cache_path):
                 index += 4
                 continue
 
-            point1_u = int(points_u[index + 1])
-            if point1_u >= 1073741824:
+            point1 = int(points[index + 1])
+            if point1 >= 1073741824:
                 index += 4
                 continue
 
-            point1 = int(points[index + 1])
             point2 = int(points[index + 2])
             point3 = int(points[index + 3])
             altitude = point3 & 65535
