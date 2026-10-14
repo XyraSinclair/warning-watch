@@ -1042,8 +1042,9 @@ the upstream reference site.
   14 Oct holds two positions for one hex, so the ingest keeps its plain
   insert. The misread also reached `takeoff_events` through the backfill: 67
   rows in the main database and 348 in the military one, 2025-09-11 to
-  2026-08-25, carry coordinates outside the globe (`lat > 90 OR lon > 180`)
-  and stay until Xyra says to delete them.
+  2026-08-25, every one at lat 1073.741824 with no alert built on it; they
+  were deleted by that exact signature on 2026-10-14 after the fix, with a
+  CSV of each set beside that day's 02:10 UTC backup.
 - `scripts/backfill_history.py` defaults to `--days 365`; always pass
   `--start-date/--end-date` for gap repair.
 - All Node DB opens set `busy_timeout = 30000` (2026-07-03 fix) so the server
