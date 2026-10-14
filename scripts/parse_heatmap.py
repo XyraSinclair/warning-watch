@@ -116,7 +116,8 @@ def parse_heatmap(filename, bbox=None, return_callsigns=True, hex_filter=None, l
             point1 = points[index + 1]
             point2 = points[index + 2]
 
-            if point1 > 1073741824:
+            # readsb writes a callsign record as lat = (1 << 30) | squawk, the squawk in decimal, so squawk 0000 is exactly 2**30.
+            if point1 >= 1073741824:
                 if not return_callsigns:
                     index += 4
                     continue

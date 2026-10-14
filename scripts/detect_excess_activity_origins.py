@@ -329,7 +329,7 @@ def scan_heatmap_file(path, tracked_keys, observations_by_aircraft, presence_air
             point0_u = int(points_u[index])
             point1 = int(points_i[index + 1])
 
-            if point1 > 1073741824:
+            if point1 >= 1073741824:
                 index += 4
                 continue
 

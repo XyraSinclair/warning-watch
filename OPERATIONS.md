@@ -1013,6 +1013,7 @@ the upstream reference site.
 | refresh exits 1 with `failedStages` | one alert channel or feed export failed | other stages already ran; the failed channel's cursor holds and retries next pass — fix the named stage |
 | SQLITE_BUSY crashes | long writer + missing busy_timeout on a new DB open | every `new Database()` must be followed by `pragma('busy_timeout = 30000')` |
 | refresh exits 1 on `export_event_signals_feed` | snapshot vs DB timestamp skew > 35 min | genuine staleness — check ingestion; the 35-min slot tolerance is intentional (untracked cohort rounds `sampled_at`) |
+| refresh exits 1 on `ingest-snapshots-detection` with `UNIQUE constraint failed: live_snapshot.hex` | a heatmap parser read a callsign record as a second position for one hex | a position record has a lat field below 2^30 and a callsign record at or above it (see the heatmap note below); every parser of the format carries the same test, and a slice never holds two positions for one hex |
 | backfill locks everything | running an unpatched/old backfill | range DELETEs must commit before the download phase (fixed 2026-07-03); never run with default `--days 365` |
 | ntfy topic spammed | ntfy.sh topics are public-write | self-host ntfy with write auth; rotate topic |
 
@@ -1020,6 +1021,24 @@ the upstream reference site.
 
 - ADS-B ingest is the free ADSBx globe-history heatmap: 30-min slots, no key,
   but requests need the browser headers in `scripts/adsbx_http.py`.
+- A heatmap record is 16 bytes: hex, lat, lon, then altitude and ground speed.
+  readsb writes a callsign record into the same shape with
+  `lat = (1 << 30) | squawk`, the squawk in decimal, so a record whose lat
+  field is at or above 2^30 is a callsign record and squawk 0000 sits exactly
+  on 2^30. Until 2026-10-14 every parser of the format (`parse_heatmap.py`,
+  `track_non_icao_hex.py`, the three masters research scripts) tested strictly
+  above 2^30 and read squawk-0000 callsign records as positions at latitude
+  1073.74: 27.1M of 1.11B callsign records across the 4,117 cached files
+  (2.4%), 7,193 of them for tracked hexes. A tracked aircraft on the ground
+  in Kentucky, squawking 0000 with a callsign, gave the 13:00 UTC slot a
+  second `live_snapshot` row for its hex, the PRIMARY KEY refused it, and the
+  ingest stage failed every pass from 13:32 UTC until the fix; the watchdog
+  paged at 13:38 UTC. Under the corrected test no slice of 13,500 on 13 and
+  14 Oct holds two positions for one hex, so the ingest keeps its plain
+  insert. The misread also reached `takeoff_events` through the backfill: 67
+  rows in the main database and 348 in the military one, 2025-09-11 to
+  2026-08-25, carry coordinates outside the globe (`lat > 90 OR lon > 180`)
+  and stay until Xyra says to delete them.
 - `scripts/backfill_history.py` defaults to `--days 365`; always pass
   `--start-date/--end-date` for gap repair.
 - All Node DB opens set `busy_timeout = 30000` (2026-07-03 fix) so the server

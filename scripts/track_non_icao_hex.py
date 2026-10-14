@@ -260,7 +260,7 @@ def parse_non_icao_heatmap(filename):
             key = (hex_value, message_type)
             summary = summaries.setdefault(key, new_summary(hex_value, message_type))
 
-            if point1_u > 1073741824:
+            if point1_u >= 1073741824:
                 flight = decode_callsign(points_u8, 4 * (index + 2))
                 squawk = str(point1_u & 0xFFFF).zfill(4)
                 summary["flight"] = summary["flight"] or flight
@@ -374,7 +374,7 @@ def parse_non_icao_metric_heatmap(filename):
             observation_count += 1
 
             point1_u = int(points_u[index + 1])
-            if point1_u > 1073741824:
+            if point1_u >= 1073741824:
                 index += 4
                 continue
 
@@ -675,14 +675,14 @@ def parse_latest_non_icao_snapshot(cache_path):
             point0_u = int(points_u[index])
             # Match parse_heatmap's unfiltered telemetry count, including
             # repeated hexes and signed southern-hemisphere coordinates.
-            if int(points[index + 1]) <= 1073741824:
+            if int(points[index + 1]) < 1073741824:
                 total_aircraft += 1
             if not point0_u & 0x1000000:
                 index += 4
                 continue
 
             point1_u = int(points_u[index + 1])
-            if point1_u > 1073741824:
+            if point1_u >= 1073741824:
                 index += 4
                 continue
 
