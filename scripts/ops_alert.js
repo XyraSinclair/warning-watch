@@ -98,7 +98,7 @@ function decide(previous, problemTexts, nowMs) {
         '',
         oldestMs >= DAY_MS
           ? 'This has outlasted every automatic repair. It needs a person. It will page daily until it clears.'
-          : 'The repair timer runs every 6 hours. This pages again in 6 hours if it persists.',
+          : 'This pages again in 6 hours if it persists.',
       ].join('\n'),
     };
     for (const record of listed) record.lastPagedMs = nowMs;

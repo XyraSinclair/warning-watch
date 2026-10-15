@@ -72,7 +72,11 @@ while the problem stays. On 2 Oct 2026 one EURDEP outage paged seven times in
 21 hours where the schedule allows four, because that detail flipped between
 `stale=false` and `stale=true`. It pages once it has lasted 3 minutes, again
 every 6 hours through its first day, then at 24 hours and daily after at
-`urgent` priority with its age in the title. It is over only after 10 minutes
+`urgent` priority with its age in the title. A page under a day old closes
+with the next page's time and nothing more: until 15 Oct 2026 it also said
+the repair timer runs every 6 hours, which heals aviation history only, and
+the one problem it heals names that repair in its own text. It is over only
+after 10 minutes
 of absence, so a flapping failure neither storms nor hides, and a one-run blip
 of a two-minute unit pages nothing. A failed CBRN run stays in the verdict
 until the next run lands, about seven minutes, so one crashed pass pages
@@ -341,7 +345,10 @@ get a connection, pool error Timeout waiting for idle object" or ran past the
 60 s page deadline, the two errors the run record and the page then showed.
 The German network's two pages mostly survived (2 of 5 polls failed) and
 EURDEP's eighteen did not (6 of 6, the last good poll at 23:45 UTC), so the
-watchdog paged at the sixth failed EURDEP poll at 03:06 UTC, as it should.
+watchdog paged at the sixth failed EURDEP poll at 03:06 UTC, as it should,
+and again on the 6 h schedule at 09:06 UTC, EURDEP unread since 23:45 UTC
+and the German network since 06:45 UTC, GetCapabilities still 0.6 s from the
+box while a one-feature GetFeature hung past 70 s or returned the pool error.
 The first line of the server's own text follows the status in the error, and
 a page unanswered in time is named by its startIndex.
 
