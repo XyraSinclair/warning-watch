@@ -373,7 +373,10 @@ server: with the kill 15 s out both networks were recorded "unanswered in
 5 s at the stage deadline" in 5 s, with it 40 s out both were recorded with
 the pool error in 21 s, and with no kill time, as the pool eased at 10:18 UTC,
 both read whole, the German network in 30 s and EURDEP's eighteen pages in
-200 s.
+200 s. Live at 10:40 UTC, the first pass since with both networks due: the
+German network read whole in 14 s, EURDEP's read was cut at startIndex 13000
+after 12 s, 10 s before the kill, and recorded as its sixteenth failure, and
+the pass ended healthy at 110 s.
 
 The aircraft feed is a collection too (`adsb.lol`), and a pass fails when any
 of its 16 regions has no sample. adsb.lol refuses requests late in a pass
