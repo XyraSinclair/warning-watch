@@ -149,7 +149,10 @@ xyra-dev-hetzner`):
 - **RSS feed**: <https://warning.watch/rss.xml> — fires on emergency-level changes and alert events
 - Ops/event feeds: `data/published/operations.json`, `event-signals.json`
 
-Logs: `journalctl -u warning-watch-refresh` (and the other unit names).
+Logs: `journalctl -u warning-watch-refresh` (and the other unit names). The
+box's clock is Europe/Berlin, so `--since` takes and `-o short-iso` prints
+local time, two hours ahead of the UTC every record and this file keep (one
+in winter); `date -u` and the pass summaries are UTC.
 
 Deploying a change: commit and push to `main`, then
 
