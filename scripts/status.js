@@ -266,6 +266,7 @@ function cbrnReport() {
       newestReading: network.newestReading ?? null,
       readingAgeMinutes: newestReadingAgeMinutes(network.newestReading),
       consecutiveFailures: network.consecutiveFailures ?? 0,
+      lastSuccessAt: network.lastSuccessAt ?? null,
       lastError: network.lastError ?? null,
     }));
     const reporting = radiation.filter((network) => network.stations > 0
@@ -399,7 +400,11 @@ if (report.cbrn) {
     }
     for (const network of report.cbrn.networks ?? []) {
       if (network.consecutiveFailures >= 6) {
-        problems.push(`cbrn network ${network.source}: ${network.consecutiveFailures} consecutive collection failures (${network.lastError ?? 'no detail'})`);
+        // The detail names the last whole read, so the page says how long the
+        // instrument has been blind and not how long the count has stood at six;
+        // it stays inside the parenthesis the problem's identity ignores.
+        const unread = network.lastSuccessAt ? `unread since ${network.lastSuccessAt.slice(0, 16).replace('T', ' ')} UTC` : 'never read';
+        problems.push(`cbrn network ${network.source}: ${network.consecutiveFailures} consecutive collection failures (${unread}; ${network.lastError ?? 'no detail'})`);
       }
     }
   }

@@ -313,9 +313,11 @@ physical gate does not depend on the baseline.
 
 Health is in `npm run status` under `cbrn`: run age (bound 15 minutes), failed
 stages, per-network station counts and reading ages, whether any network
-reported inside four hours, and consecutive collection failures (bound 6). The
-verdict treats "no gamma network reported within four hours" as a problem — a
-blind radiological instrument must never read as calm. The public picture is at
+reported inside four hours, and consecutive collection failures (bound 6; the
+problem's detail names the network's last whole read, so the page says how
+long the instrument has been blind and not how long the count has stood at
+six). The verdict treats "no gamma network reported within four hours" as a
+problem — a blind radiological instrument must never read as calm. The public picture is at
 <https://warning.watch/>, backed by `/api/status` (no auth, `no-store`,
 public severities only).
 
