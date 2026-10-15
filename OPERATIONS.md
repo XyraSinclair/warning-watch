@@ -378,7 +378,21 @@ both read whole, the German network in 30 s and EURDEP's eighteen pages in
 200 s. Live at 10:40 UTC, the first pass since with both networks due: the
 German network read whole in 14 s, EURDEP's read was cut at startIndex 13000
 after 12 s, 10 s before the kill, and recorded as its sixteenth failure, and
-the pass ended healthy at 110 s.
+the pass ended healthy at 110 s. EURDEP's eighteen pages next added up at
+15:36 UTC, its twenty-fifth poll since the last good one at 23:45 UTC and its
+first whole read in 15 h 51 m, and the watchdog sent the recovery note at
+15:48 UTC; the German network had read whole at 10:40, 11:16, 12:26 and
+15:36 UTC and failed the polls between, never six in a row. The pool starved
+again from 16:10 UTC: EURDEP's next six polls failed, four with the pool error
+at startIndex 0, one unanswered in 60 s and one cut at startIndex 14000 at
+the stage deadline, the watchdog paged at the sixth at 18:56 UTC, four
+minutes after the count reached six, and the German network read whole at
+17:45 UTC and failed the other five. From the box at 18:58 UTC, the ingest
+idle, GetCapabilities took 0.5 s and a one-feature GetFeature on EURDEP
+answered in 48 s. That page said "for 4m" of an instrument blind since
+15:36 UTC, so a network's problem now names its last whole read in the
+detail; deployed at 19:04 UTC, the 19:06 UTC check carried the new text under
+the same problem and sent nothing.
 
 The aircraft feed is a collection too (`adsb.lol`), and a pass fails when any
 of its 16 regions has no sample. adsb.lol refuses requests late in a pass
