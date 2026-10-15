@@ -49,11 +49,31 @@ function options(argv) {
 const PAGE = 1000;
 const READS = 2;
 
-async function fetchPage(network, startIndex) {
+// GeoServer answers a failure it cannot name as HTTP 400 with an OWS
+// ExceptionReport, which read as a bad request: from 00:17 UTC on 15 Oct 2026
+// the BfS database pool was starved and every GetFeature waited 20 s for
+// "Unable to obtain connection: Cannot get a connection, pool error Timeout
+// waiting for idle object" or ran past the 60 s page deadline. The first line
+// of the server's own text follows the status in the error, and so on the page.
+async function exceptionText(response) {
+  const chunks = [];
+  let bytes = 0;
+  for await (const chunk of response.body ?? []) { chunks.push(chunk); bytes += chunk.length; if (bytes >= 16384) break; }
+  const match = /<ows:ExceptionText>([^<]*)/.exec(Buffer.concat(chunks).toString('utf8'));
+  return match ? `: ${match[1].trim().split('\n')[0].slice(0, 200)}` : '';
+}
+
+// A page unanswered within the deadline is named by its startIndex, not by the
+// runtime's "The operation was aborted due to timeout".
+function fetchPage(network, startIndex) {
+  return readPage(network, startIndex).catch((error) => { throw error.name === 'TimeoutError' ? new Error(`WFS page at startIndex ${startIndex} unanswered in 60 s`) : error; });
+}
+
+async function readPage(network, startIndex) {
   const url = new URL('https://www.imis.bfs.de/ogc/opendata/ows');
   url.search = new URLSearchParams({ service: 'WFS', version: '2.0.0', request: 'GetFeature', typeName: `opendata:${NETWORKS[network]}`, outputFormat: 'application/json', propertyName: PROPERTIES, sortBy: 'id', count: String(PAGE), startIndex: String(startIndex) }).toString();
   const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT, 'Accept-Encoding': 'gzip' }, signal: AbortSignal.timeout(60000) });
-  if (!response.ok) { await response.body?.cancel(); throw new Error(`WFS HTTP ${response.status} at startIndex ${startIndex}`); }
+  if (!response.ok) throw new Error(`WFS HTTP ${response.status} at startIndex ${startIndex}${await exceptionText(response)}`);
   const chunks = [];
   let bytes = 0;
   for await (const chunk of response.body) {

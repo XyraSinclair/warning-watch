@@ -333,6 +333,17 @@ from 17,239 to 17,883 rows between the first page and the last, the one such
 read in 220 polls since 5 Oct, so a read whose pages do not sum is taken once
 more from the start (`reads` in the run detail) and only a second mismatch
 fails the poll.
+A GeoServer failure it cannot name is an HTTP 400 with an OWS ExceptionReport,
+which read as a bad request: from 00:17 UTC on 15 Oct 2026 the BfS database
+pool was starved, so GetCapabilities, which needs no database, answered in
+0.4 s while a GetFeature waited 20 s for "Unable to obtain connection: Cannot
+get a connection, pool error Timeout waiting for idle object" or ran past the
+60 s page deadline, the two errors the run record and the page then showed.
+The German network's two pages mostly survived (2 of 5 polls failed) and
+EURDEP's eighteen did not (6 of 6, the last good poll at 23:45 UTC), so the
+watchdog paged at the sixth failed EURDEP poll at 03:06 UTC, as it should.
+The first line of the server's own text follows the status in the error, and
+a page unanswered in time is named by its startIndex.
 
 The aircraft feed is a collection too (`adsb.lol`), and a pass fails when any
 of its 16 regions has no sample. adsb.lol refuses requests late in a pass
