@@ -350,7 +350,27 @@ and again on the 6 h schedule at 09:06 UTC, EURDEP unread since 23:45 UTC
 and the German network since 06:45 UTC, GetCapabilities still 0.6 s from the
 box while a one-feature GetFeature hung past 70 s or returned the pool error.
 The first line of the server's own text follows the status in the error, and
-a page unanswered in time is named by its startIndex.
+a page unanswered in time is named by its startIndex. The German network's
+sixth failed poll in a row, at 10:05 UTC, was a second problem and paged at
+10:10 UTC, four minutes after it was first seen, as the schedule means it to.
+The same outage found a fault of ours: the networks were read one after
+another, each page held to 60 s, while the refresh kills the stage at 120 s,
+so a pass in which both BfS networks waited out their first page was killed
+with the EURDEP or RadNet poll in flight and unrecorded, seven passes from
+00:15 to 10:05 UTC. A killed poll moves no failure count, the pass shows
+`spawnSync /usr/bin/node ETIMEDOUT` in place of the cause, and the watchdog
+sees that stage failure for one check in thirty, never long enough to page;
+at 10:05 UTC the poll lost was RadNet's, the one live network, stamped a
+second before the kill and so unread until the 11:10 UTC pass. The ingest now
+reads its networks side by side and ends every request 10 s before the kill
+time the refresh hands it as `EWS_STAGE_KILL_AT`, named `at the stage
+deadline` in the run record, so a starved server costs one page deadline,
+not one per network. Proven from a scratch database against the starved
+server: with the kill 15 s out both networks were recorded "unanswered in
+5 s at the stage deadline" in 5 s, with it 40 s out both were recorded with
+the pool error in 21 s, and with no kill time, as the pool eased at 10:18 UTC,
+both read whole, the German network in 30 s and EURDEP's eighteen pages in
+200 s.
 
 The aircraft feed is a collection too (`adsb.lol`), and a pass fails when any
 of its 16 regions has no sample. adsb.lol refuses requests late in a pass

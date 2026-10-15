@@ -19,6 +19,9 @@ const MAX_FEATURES = 30000;
 
 function options(argv) {
   const result = { db: process.env.EWS_CBRN_DB_PATH, networks: ['de', 'eurdep', 'radnet'], minIntervalMinutes: 30, months: 1, force: false };
+  // cbrn_refresh.js tells each stage when it will be killed; a run by hand has no such time.
+  result.killAt = process.env.EWS_STAGE_KILL_AT === undefined ? Infinity : Number(process.env.EWS_STAGE_KILL_AT);
+  if (Number.isNaN(result.killAt)) throw new Error('EWS_STAGE_KILL_AT must be epoch milliseconds.');
   const names = { '--db': 'db', '--networks': 'networks', '--min-interval-minutes': 'minIntervalMinutes', '--months': 'months' };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -39,15 +42,36 @@ function options(argv) {
 
 // The BfS WFS returns at most 1000 features per request whatever count asks
 // for (measured 2026-10-03; EURDEP is 17085 rows, five window labels per
-// station), so every network is read in id-sorted pages, four at a time, and
-// the pages must add up to the server's own numberMatched: fewer is a
-// truncated read. The latest-value views also move while they are read, as an
+// station), so every network is read in id-sorted pages, four at a time, the
+// networks side by side, and the pages must add up to the server's own
+// numberMatched: fewer is a truncated read. The latest-value views also move while they are read, as an
 // hour's values land: at 15:05 UTC on 10 Oct 2026 EURDEP grew from 17239 to
 // 17883 rows between the first page and the last, the one such read in 220
 // polls since 5 Oct. A read whose pages do not sum is taken once more from the
 // start, and only a second mismatch fails the poll.
 const PAGE = 1000;
 const READS = 2;
+// The stage is killed (SIGKILL) at EWS_STAGE_KILL_AT, 120 s after it starts,
+// and a poll it has not recorded by then is lost: its network's failure count
+// does not move and the pass shows "spawnSync ETIMEDOUT" in place of the
+// cause. Until 15 Oct 2026 the networks were read one after another, so when
+// the BfS pool was starved the German network's 60 s and EURDEP's 60 s met the
+// deadline exactly and EURDEP's poll went unrecorded at 09:35 and 10:05 UTC.
+// Now every request ends this long before the kill, and the networks are read
+// together, so a starved server costs one page deadline, not one per network.
+const STAGE_MARGIN_MS = 10_000;
+const PAGE_DEADLINE_MS = 60_000;
+const RADNET_DEADLINE_MS = 30_000;
+
+// A request's deadline, or the stage's, whichever falls first.
+function deadline(ms, stage) {
+  const own = AbortSignal.timeout(ms);
+  return stage ? AbortSignal.any([own, stage]) : own;
+}
+
+function unanswered(started, stage) {
+  return `unanswered in ${Math.round((Date.now() - started) / 1000)} s${stage?.aborted ? ' at the stage deadline' : ''}`;
+}
 
 // GeoServer answers a failure it cannot name as HTTP 400 with an OWS
 // ExceptionReport, which read as a bad request: from 00:17 UTC on 15 Oct 2026
@@ -65,14 +89,15 @@ async function exceptionText(response) {
 
 // A page unanswered within the deadline is named by its startIndex, not by the
 // runtime's "The operation was aborted due to timeout".
-function fetchPage(network, startIndex) {
-  return readPage(network, startIndex).catch((error) => { throw error.name === 'TimeoutError' ? new Error(`WFS page at startIndex ${startIndex} unanswered in 60 s`) : error; });
+function fetchPage(network, startIndex, stage) {
+  const started = Date.now();
+  return readPage(network, startIndex, stage).catch((error) => { throw error.name === 'TimeoutError' ? new Error(`WFS page at startIndex ${startIndex} ${unanswered(started, stage)}`) : error; });
 }
 
-async function readPage(network, startIndex) {
+async function readPage(network, startIndex, stage) {
   const url = new URL('https://www.imis.bfs.de/ogc/opendata/ows');
   url.search = new URLSearchParams({ service: 'WFS', version: '2.0.0', request: 'GetFeature', typeName: `opendata:${NETWORKS[network]}`, outputFormat: 'application/json', propertyName: PROPERTIES, sortBy: 'id', count: String(PAGE), startIndex: String(startIndex) }).toString();
-  const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT, 'Accept-Encoding': 'gzip' }, signal: AbortSignal.timeout(60000) });
+  const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT, 'Accept-Encoding': 'gzip' }, signal: deadline(PAGE_DEADLINE_MS, stage) });
   if (!response.ok) throw new Error(`WFS HTTP ${response.status} at startIndex ${startIndex}${await exceptionText(response)}`);
   const chunks = [];
   let bytes = 0;
@@ -86,9 +111,9 @@ async function readPage(network, startIndex) {
   return { data, bytes, contentEncoding: response.headers.get('content-encoding'), wireBytes: response.headers.get('content-length') };
 }
 
-async function fetchNetwork(network) {
+async function fetchNetwork(network, stage) {
   for (let read = 1; ; read += 1) {
-    const first = await fetchPage(network, 0);
+    const first = await fetchPage(network, 0, stage);
     const matched = first.data.numberMatched;
     if (!matched || matched > MAX_FEATURES) throw new Error(`WFS numberMatched ${matched} is empty or oversized`);
     const starts = [];
@@ -99,7 +124,7 @@ async function fetchNetwork(network) {
       while (next < starts.length) {
         const index = next;
         next += 1;
-        pages[index + 1] = await fetchPage(network, starts[index]);
+        pages[index + 1] = await fetchPage(network, starts[index], stage);
       }
     };
     await Promise.all(Array.from({ length: 4 }, worker));
@@ -153,9 +178,10 @@ function ingestCollection(db, network, result, now = Date.now()) {
 
 // One RadNet monitor-month -> readings. A monitor that was offline all month
 // answers 200 with the header alone: that is zero readings, not a failure.
-async function fetchRadnetMonth(monitor, year, month) {
+async function fetchRadnetMonth(monitor, year, month, stage) {
   const url = `${RADNET_ROOT}/${year}/${String(month).padStart(2, '0')}/fixed/${monitor.state}/${encodeURIComponent(monitor.city)}`;
-  const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(30000) });
+  const started = Date.now();
+  const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: deadline(RADNET_DEADLINE_MS, stage) }).catch((error) => { throw error.name === 'TimeoutError' ? new Error(`RadNet ${monitor.state}/${monitor.city} ${unanswered(started, stage)}`) : error; });
   if (!response.ok) { await response.body?.cancel(); throw new Error(`RadNet HTTP ${response.status} for ${monitor.state}/${monitor.city}`); }
   const text = await response.text();
   if (text.length > MAX_BYTES) throw new Error('RadNet body oversized');
@@ -176,7 +202,7 @@ async function fetchRadnetMonth(monitor, year, month) {
   return { readings, withoutDose, bytes: text.length };
 }
 
-async function fetchRadnet(months, now = Date.now()) {
+async function fetchRadnet(months, now = Date.now(), stage = null) {
   const wanted = [];
   for (let back = 0; back < months; back += 1) {
     const date = new Date(Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth() - back, 1));
@@ -191,7 +217,7 @@ async function fetchRadnet(months, now = Date.now()) {
       const monitor = RADNET_MONITORS[index];
       try {
         const parts = [];
-        for (const [year, month] of wanted) parts.push(await fetchRadnetMonth(monitor, year, month));
+        for (const [year, month] of wanted) parts.push(await fetchRadnetMonth(monitor, year, month, stage));
         results[index] = { monitor, readings: parts.flatMap((part) => part.readings), withoutDose: parts.reduce((sum, part) => sum + part.withoutDose, 0), bytes: parts.reduce((sum, part) => sum + part.bytes, 0) };
       } catch (error) { results[index] = { monitor, error: error.message }; }
     }
@@ -243,33 +269,33 @@ function store(db, network, rows, detail) {
 async function main() {
   const settings = options(process.argv.slice(2));
   const db = openCbrnDb({ dbPath: settings.db });
-  const results = [];
-  try {
-    for (const network of settings.networks) {
-      const now = Date.now();
-      const allowed = db.transaction(() => {
-        const previous = readAlarmState(db, `ingest:${network}`, 'cadence');
-        if (!settings.force && previous && now - Date.parse(previous.polled_at) < Math.max(settings.minIntervalMinutes, MIN_INTERVAL_FLOOR[network] || 0) * 60000) return false;
-        writeAlarmState(db, `ingest:${network}`, 'cadence', { polled_at: new Date(now).toISOString() });
-        return true;
-      }).immediate();
-      if (!allowed) { results.push({ network, skipped: 'cadence' }); continue; }
-      // A network that cannot be read is a failed collection, counted in its
-      // run record and paged by the status verdict at the sixth in a row, as
-      // a partial or stale poll is. Until 10 Oct 2026 it also failed the stage,
-      // which paged inside four minutes for one 30-minute poll of one network
-      // while the other two reported, and a longer outage was a fresh problem
-      // to the watchdog at every failed poll. The stage fails only when it
-      // cannot run.
-      try { results.push(network === 'radnet' ? ingestRadnet(db, await fetchRadnet(settings.months)) : ingestCollection(db, network, await fetchNetwork(network))); }
-      catch (error) {
-        const roster = db.prepare('SELECT COUNT(*) AS n FROM cbrn_stations WHERE source = ?').get(network).n;
-        const detail = { roster, returned_known: 0, shortfall: roster, failed: true };
-        recordIngestRun(db, { source: network, ok: false, error: error.message, detail });
-        results.push({ network, ok: false, error: error.message, ...detail });
-      }
+  const stage = settings.killAt === Infinity ? null : AbortSignal.timeout(Math.max(0, settings.killAt - STAGE_MARGIN_MS - Date.now()));
+  const poll = async (network) => {
+    const now = Date.now();
+    const allowed = db.transaction(() => {
+      const previous = readAlarmState(db, `ingest:${network}`, 'cadence');
+      if (!settings.force && previous && now - Date.parse(previous.polled_at) < Math.max(settings.minIntervalMinutes, MIN_INTERVAL_FLOOR[network] || 0) * 60000) return false;
+      writeAlarmState(db, `ingest:${network}`, 'cadence', { polled_at: new Date(now).toISOString() });
+      return true;
+    }).immediate();
+    if (!allowed) return { network, skipped: 'cadence' };
+    // A network that cannot be read is a failed collection, counted in its
+    // run record and paged by the status verdict at the sixth in a row, as
+    // a partial or stale poll is. Until 10 Oct 2026 it also failed the stage,
+    // which paged inside four minutes for one 30-minute poll of one network
+    // while the other two reported, and a longer outage was a fresh problem
+    // to the watchdog at every failed poll. The stage fails only when it
+    // cannot run.
+    try { return network === 'radnet' ? ingestRadnet(db, await fetchRadnet(settings.months, Date.now(), stage)) : ingestCollection(db, network, await fetchNetwork(network, stage)); }
+    catch (error) {
+      const roster = db.prepare('SELECT COUNT(*) AS n FROM cbrn_stations WHERE source = ?').get(network).n;
+      const detail = { roster, returned_known: 0, shortfall: roster, failed: true };
+      recordIngestRun(db, { source: network, ok: false, error: error.message, detail });
+      return { network, ok: false, error: error.message, ...detail };
     }
-    console.log(JSON.stringify({ networks: results }));
+  };
+  try {
+    console.log(JSON.stringify({ networks: await Promise.all(settings.networks.map(poll)) }));
   } finally { db.close(); }
 }
 
