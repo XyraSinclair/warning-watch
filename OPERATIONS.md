@@ -392,7 +392,23 @@ idle, GetCapabilities took 0.5 s and a one-feature GetFeature on EURDEP
 answered in 48 s. That page said "for 4m" of an instrument blind since
 15:36 UTC, so a network's problem now names its last whole read in the
 detail; deployed at 19:04 UTC, the 19:06 UTC check carried the new text under
-the same problem and sent nothing.
+the same problem and sent nothing. The pool stayed starved through the night:
+both networks failed at 19:20, 19:50 and 20:25 UTC, the German network read
+whole at 20:55, 22:40 and 23:50 UTC and failed every other poll, and EURDEP
+failed all fifteen to 03:15 UTC on 16 Oct, ten with the pool error at
+startIndex 0 in 20 s, three unanswered in 60 s, and two, at 22:40 and 23:50
+UTC with the pool half-eased, cut at the stage deadline at startIndex 8000
+and 9000, eight and nine pages inside the stage's 110 s against 36 to 48 s
+for all eighteen through 14 Oct; at that pace the whole read needs 140 to
+170 s, and the deadline stays where it is. The watchdog re-paged EURDEP at
+00:58 UTC on the 6 h schedule; the German network's six failures in a row
+from 00:25 to 03:15 UTC were a second problem, first seen by the 03:16 UTC
+check and paged at 03:20 UTC with EURDEP's twenty-first under the title
+"unhealthy for 8h 28m", EURDEP's age since its count reached six at 18:52
+UTC. From the box at 03:26 UTC, GetCapabilities took 0.6 s and a one-feature
+GetFeature on EURDEP answered the pool error in 20.3 s. The site answered
+throughout, RadNet and the aircraft feed read on time, and the off-box
+dead-man saw the site alive at every probe.
 
 The aircraft feed is a collection too (`adsb.lol`), and a pass fails when any
 of its 16 regions has no sample. adsb.lol refuses requests late in a pass
