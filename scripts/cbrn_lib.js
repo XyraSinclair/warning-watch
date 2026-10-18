@@ -317,8 +317,23 @@ function insertCbrnEvent(db, event) {
   return { inserted: true, escalated: false, id: null };
 }
 
+// cbrn_refresh.js kills a stage with SIGKILL at EWS_STAGE_KILL_AT and a killed
+// stage records nothing, so an ingest ends its own requests before the kill:
+// a request's deadline, or the stage's, whichever falls first, and the name a
+// request cut by either carries.
+function deadline(ms, stage) {
+  const own = AbortSignal.timeout(ms);
+  return stage ? AbortSignal.any([own, stage]) : own;
+}
+
+function unanswered(started, stage) {
+  return `unanswered in ${Math.round((Date.now() - started) / 1000)} s${stage?.aborted ? ' at the stage deadline' : ''}`;
+}
+
 module.exports = {
   CBRN_COHORT,
+  deadline,
+  unanswered,
   KIND,
   cbrnDbPath,
   openCbrnDb,

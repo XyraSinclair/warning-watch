@@ -427,6 +427,29 @@ lost a region asked nothing again, all 19 timed-out regions among them, and
 six such passes in a row paged on 6 Oct. A pass that still lacks a region
 fails as before.
 
+The sweep itself had no deadline: sixteen regions at six seconds of spacing
+and fifteen of timeout each is 336 s against the 210 s at which the refresh
+kills the stage, and the kill is SIGKILL, so a killed pass records nothing and
+stamps no end. On 18 Oct 2026 adsb.lol timed out, refused (HTTP 429 and 503)
+or failed to connect from about 04:30 to 16:10 UTC, and 27 passes from 05:03
+to 11:33 UTC were killed, each about 219 s after its slot. Every killed pass
+read as `cbrn stage aircraft-ingest: spawnSync /usr/bin/node ETIMEDOUT` and a
+failed `warning-watch-cbrn.service`, two in a row as `cbrn: refresh stale` on
+the box and, since the off-box dead-man reads the pass stamp, as `stalled` at
+high (09:15, 09:35 and 11:01 UTC, each 17 to 18 min after the last stamped
+pass), while the passes that did end recorded the outage as `adsb.lol`
+collection failures, so one feed outage paged under four names: the watchdog
+sent nine pages from 05:08 to 15:38 UTC and six recovery notes. Since 18 Oct
+2026 the pass honours `EWS_STAGE_KILL_AT` less 10 s as the radiation stage
+does: a request's 15 s timeout is cut at the stage deadline and recorded
+`unanswered in N s at the stage deadline`, a region whose turn comes after it
+is recorded `unasked at the stage deadline`, the gate names the control's
+error, and the record is written and the pass stamped either way, so a feed
+that will not answer costs one recorded failure, the page it is meant to be.
+Proven on a scratch database: with 45 s to the kill the pass asked five
+regions, cut the sixth at the deadline, recorded ten unasked and wrote at
+35 s; with 10 s it recorded all sixteen unasked and ended at once.
+
 Coverage limits are operational facts, not caveats: gamma telemetry is the
 European reporting networks republished by the German BfS service (the JRC's own
 EURDEP value service was stale and partly unavailable when this was built — its

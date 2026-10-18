@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { openCbrnDb, readAlarmState, writeAlarmState, recordIngestRun, nowIso } = require('./cbrn_lib');
+const { openCbrnDb, readAlarmState, writeAlarmState, recordIngestRun, nowIso, deadline, unanswered } = require('./cbrn_lib');
 const USER_AGENT = 'Warning.watch/1.0 (https://warning.watch; CBRN public-source watch)';
 const NETWORKS = { de: 'odlinfo_odl_1h_latest', eurdep: 'eurdep_latestValue', radnet: null };
 // EPA RadNet: one CSV per monitor per month (about 75 KB at month end), hourly
@@ -62,16 +62,6 @@ const READS = 2;
 const STAGE_MARGIN_MS = 10_000;
 const PAGE_DEADLINE_MS = 60_000;
 const RADNET_DEADLINE_MS = 30_000;
-
-// A request's deadline, or the stage's, whichever falls first.
-function deadline(ms, stage) {
-  const own = AbortSignal.timeout(ms);
-  return stage ? AbortSignal.any([own, stage]) : own;
-}
-
-function unanswered(started, stage) {
-  return `unanswered in ${Math.round((Date.now() - started) / 1000)} s${stage?.aborted ? ' at the stage deadline' : ''}`;
-}
 
 // GeoServer answers a failure it cannot name as HTTP 400 with an OWS
 // ExceptionReport, which read as a bad request: from 00:17 UTC on 15 Oct 2026
