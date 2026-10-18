@@ -20,7 +20,7 @@ physical thing changed" to "a person knows, with the uncertainty stated."
 | Family | What is measured | Source | Cadence |
 |---|---|---|---|
 | **Radiological telemetry** | Gamma dose rate per station, µSv/h | German BfS/IMIS OGC service: the 1,676-probe German network (`opendata:odlinfo_odl_1h_latest`) and the live EURDEP mirror, 17,384 stations in 44 countries (`opendata:eurdep_latestValue`); EPA RadNet, 140 fixed monitors across the United States, 131 with a dose rate, one per city (per-monitor monthly CSV) | hourly |
-| **Civil air traffic** | Aircraft count, emergency indications and special-mission type presence in 14 CBRN-relevant geographies plus 2 health controls | `api.adsb.lol` point queries, public ADS-B | 5 min |
+| **Civil air traffic** | Aircraft count, emergency indications and special-mission type presence in 14 CBRN-relevant geographies plus 2 health controls | `api.adsb.lol` point queries, public ADS-B | hourly |
 | **Public vocabulary** | Counts of CBRN event words by place, per hour | the watch's public post stream and news index | hourly buckets |
 | **Seismic** | Underground detonation candidates: location against the seven test sites where a test remains possible, depth, and the agency's classification | USGS ComCat significant-week and all-day feeds | 5 min |
 | **Authority** | Official CBRN notices and instructions | NWS CAP (radiological/hazmat/nuclear-plant events), NRC event notifications with emergency class, NRC reactor power, FAA TFRs, WHO Disease Outbreak News, ECDC CDTR, IAEA news, HealthMap | 10 min – 1 h |
@@ -195,8 +195,9 @@ raises confidence in the *observation*, not in its cause.
 
 One systemd timer (`warning-watch-cbrn.timer`, every five minutes) runs
 `scripts/cbrn_refresh.js`: radiation ingest (self-limited to one poll per
-network per 30 minutes), aircraft ingest, then the four detectors and the
-fusion pass. Stages are failure-isolated and reported individually; a missing
+network per 30 minutes), aircraft ingest (one sweep of the sixteen regions an
+hour, inside adsb.lol's published quota of 500 requests a day), then the four
+detectors and the fusion pass. Stages are failure-isolated and reported individually; a missing
 stage script is a hard failure, never a silent skip. The pass is guarded by a
 flock and a 240-second deadline.
 
@@ -216,9 +217,11 @@ service was found stale and partly unavailable during design — its station
 catalogue's timestamps froze at 2024-05-06, roughly sixteen months behind — so
 the BfS mirror is the live path, and it must be watched for its own lag drift.
 ADS-B data come from
-`adsb.lol` under ODbL; attribution is required and the API's rate limits are
-dynamic, so the collector spaces its requests six seconds apart and asks a
-refused region once more at the end of the pass. NRC feeds require a non-browser User-Agent and intermittently deny
+`adsb.lol` under ODbL; attribution is required, and the API names its limits
+in its response headers (four requests a second, sixty a minute and five
+hundred a day for one address, read on 18 Oct 2026), so the collector sweeps
+its sixteen regions once an hour six seconds apart, counts the day's requests
+itself, and asks a failed hour again only from the day's spare. NRC feeds require a non-browser User-Agent and intermittently deny
 bursts; the registry's backoff covers it. CTBTO's IMS network is restricted by
 treaty and is not used. ProMED moved its reports behind a subscription and is
 not used. EPA RadNet's near-real-time gamma is read from its per-monitor

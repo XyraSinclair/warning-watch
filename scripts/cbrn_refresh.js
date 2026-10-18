@@ -29,8 +29,10 @@ const STATE_PATH = path.join(DATA_DIR, 'cbrn-refresh-state.json');
 
 const RUN_DEADLINE_MS = 270_000;
 const STAGE_TIMEOUT_MS = 120_000;
-// The aircraft instrument paces one request per six seconds to stay inside
-// adsb.lol's dynamic rate limit, so fourteen regions need roughly 110 seconds.
+// The aircraft instrument sweeps its sixteen regions once an hour at one
+// request per six seconds, inside adsb.lol's published quota of 500 requests a
+// day; a sweep needs roughly 110 seconds and the other eleven passes of the
+// hour ask nothing.
 const AIRCRAFT_STAGE_TIMEOUT_MS = 210_000;
 const startedAt = Date.now();
 

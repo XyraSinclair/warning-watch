@@ -450,6 +450,63 @@ Proven on a scratch database: with 45 s to the kill the pass asked five
 regions, cut the sixth at the deadline, recorded ten unasked and wrote at
 35 s; with 10 s it recorded all sixteen unasked and ended at once.
 
+adsb.lol names a quota, and the pass keeps inside it. When the feed came back
+on 18 Oct 2026 its answers carried `x-ratelimit-limit: 500, 4;w=1, 60;w=60,
+500;w=86400`, `x-ratelimit-remaining` and `x-ratelimit-reset`: four requests a
+second, sixty a minute and five hundred a day for one address, the day
+anchored at 00:00 UTC (a reset of 16,806 s at 19:19:54 UTC), and the limit
+header names the window nearest to full, so a healthy answer shows the
+per-second window and never the day's. Sixteen regions every five minutes were
+4,608 requests a day. The feed answered again from 16:10 UTC; 31 whole passes
+and two second asks to 18:40 UTC were 498 requests, the 18:45 pass had three
+answered and thirteen refused, and every request to midnight was refused: both
+controls failed the gate with `HTTP 429`, the watchdog paged the sixth failure
+at 19:18 UTC, and each pass after it spent 28 refused requests and 175 s
+saying so. The same policy answered a second address with 200 at 19:20 UTC, so
+the quota is per address and the box's was spent; the feed was up. Since 18 Oct
+2026 the pass sweeps the sixteen regions once an hour, in the first pass of the
+hour, 384 requests a day, and keeps the day's count itself in `cbrn_alarm_state`
+(`ingest:adsb.lol`, method `quota`: the UTC day, the requests sent, and when a
+refusal named the day's quota, the reset it named; method `cadence`: the hour
+swept and whether it read whole). It stops asking at 500. A refusal with no
+requests remaining and a reset longer than two minutes is the day's quota and
+ends the asking until that reset, recorded as `HTTP 429, adsb.lol's daily
+quota is spent until 00:00 UTC` and, for each region after it, `unasked,
+adsb.lol's daily quota is spent until 00:00 UTC`; a reset of seconds is the
+per-second or per-minute window, an ordinary refusal asked again at the end
+of the pass. An hour whose sweep did not read whole is asked again at the next
+pass only from the day's spare, the quota less the requests sent and less
+sixteen for every hour still to start before midnight UTC, so a bad hour never
+spends the hours after it. The other passes of the hour ask nothing and stamp
+the run record's `last_attempt_at`, which the off-box dead-man reads as the
+pass, so a quiet pass is not a stall; the stage ends in under a second. The run
+detail carries `requests_today` and, when set, `quota_spent_until`. A spent
+quota records one failure per pass at no requests until the reset, and the
+watchdog's problem keeps its identity while the text in its parenthesis
+changes. The detectors keep their 21-day baselines across the change: a sample
+is a snapshot of the aircraft over the region whatever the slot width, so
+`detect_cbrn_airspace.js` takes a healthy prior sample of either width into the
+baseline (before, only samples of the same `sample_minutes`), and an hourly
+sample's consecutive neighbour is the one an hour before it. What hourly
+sampling costs: a traffic void reaches `elevated` after three hourly samples
+and not fifteen minutes, a special-mission type must be present in two hourly
+samples, and an adsb.lol outage pages at the sixth failed sweep, 30 to 65 min
+in while the spare allows a retry each pass and up to six hours once it does
+not. Five-minute sampling needs another feed, and the choice is Xyra's: adsb.fi
+(`opendata.adsb.fi`, one request a second) says personal, non-commercial use
+with attribution; airplanes.live serves the same `v2/point` shape and its
+terms could not be read from the box (HTTP 403); ADS-B Exchange sells a key;
+the table under § Live-source prerequisite has the rows, and no feed has been
+asked for or paid for. Proven on a scratch database on 18 Oct 2026: a fresh
+database swept the sixteen regions whole in 104 s (16 requests in the ledger);
+a rerun in the same hour asked nothing, stamped and recorded no run; with every
+answer the quota refusal the pass sent one request, recorded fifteen unasked,
+wrote the reset as `spent_until` and a failure; its rerun sent none and
+recorded a second failure; a ledger at 500 recorded all sixteen unasked until
+00:00 UTC; a failed hour with a spare of ten skipped `spare` and stamped; and
+the detector read a five-aircraft hourly sample against 42 five-minute samples
+of the same hour as a void at `watch` with nothing warming.
+
 Coverage limits are operational facts, not caveats: gamma telemetry is the
 European reporting networks republished by the German BfS service (the JRC's own
 EURDEP value service was stale and partly unavailable when this was built — its

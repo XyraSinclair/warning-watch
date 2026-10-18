@@ -330,10 +330,19 @@ function unanswered(started, stage) {
   return `unanswered in ${Math.round((Date.now() - started) / 1000)} s${stage?.aborted ? ' at the stage deadline' : ''}`;
 }
 
+// A pass that asks nothing by design, the hour already read or the day's spare
+// requests spent, still stamps its end: the off-box dead-man reads the stamp
+// as the pass, and a pass that ends is not a stall. The record's success,
+// error and failure count are the last ask's and stay as they are.
+function stampIngestPass(db, source) {
+  db.prepare('UPDATE cbrn_ingest_runs SET last_attempt_at = ? WHERE source = ?').run(nowIso(), source);
+}
+
 module.exports = {
   CBRN_COHORT,
   deadline,
   unanswered,
+  stampIngestPass,
   KIND,
   cbrnDbPath,
   openCbrnDb,

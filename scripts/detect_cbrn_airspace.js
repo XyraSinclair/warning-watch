@@ -98,11 +98,16 @@ function detect(db, settings, now = Date.now()) {
         for (const detector of ['void', 'emergency', 'special']) warm(region.id, detector, 'Control health or sample cadence unavailable');
         continue;
       }
+      // A sample is a snapshot of the aircraft over the region, so a count
+      // filed in a five-minute slot and one filed in an hourly slot are the
+      // same measure and share a baseline; the slot width of the sample in
+      // hand is the cadence at which the one before it counts as consecutive.
+      // The ingest moved from five-minute to hourly slots on 18 Oct 2026.
       const cadence = metadata.sample_minutes * 60000;
       const hour = row.sampled_at.slice(0, 13);
       const baselineRows = history.filter((prior) => {
         const age = at - Date.parse(prior.sampled_at);
-        return age > 0 && age <= 21 * DAY_MS && healthySlots.has(prior.sampled_at) && sampleMetadata(prior)?.sample_minutes === metadata.sample_minutes;
+        return age > 0 && age <= 21 * DAY_MS && healthySlots.has(prior.sampled_at) && sampleMetadata(prior) !== null;
       });
       const sameHour = baselineRows.filter((prior) => new Date(prior.sampled_at).getUTCHours() === new Date(at).getUTCHours());
       const emit = (kind, level, suffix, message, payload, keyParts) => {

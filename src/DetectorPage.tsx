@@ -173,7 +173,7 @@ export default function DetectorPage() {
           {num.format(status?.cohorts?.[1]?.roster ?? 0)} military airframes, and aircraft broadcasting an address no
           registry issued are counted beside them. Over {num.format(status?.aircraft.regions ?? 0)} watched regions (nuclear
           plants and fuel-cycle sites, chemical complexes, two capitals and two control regions) we sample the airspace
-          every five minutes. The people with the most to lose and the best information
+          every hour. The people with the most to lose and the best information
           move first, and they move by air: {num.format(status?.aviation.departures.records ?? 0)} departures over{' '}
           {num.format(status?.aviation.departures.days ?? 0)} days are the baseline every new half hour is scored
           against.
@@ -197,7 +197,7 @@ export default function DetectorPage() {
             <tr>
               <th>Airspace over CBRN sites</th>
               <td>{num.format(status?.aircraft.regions ?? 0)} regions</td>
-              <td>5-minute samples</td>
+              <td>hourly samples</td>
               <td>sampled {ago(status?.aircraft.newestSample ?? null)}</td>
             </tr>
           </tbody>
