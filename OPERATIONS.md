@@ -505,7 +505,14 @@ wrote the reset as `spent_until` and a failure; its rerun sent none and
 recorded a second failure; a ledger at 500 recorded all sixteen unasked until
 00:00 UTC; a failed hour with a spare of ten skipped `spare` and stamped; and
 the detector read a five-aircraft hourly sample against 42 five-minute samples
-of the same hour as a void at `watch` with nothing warming.
+of the same hour as a void at `watch` with nothing warming. Deployed at 19:49
+UTC on 18 Oct 2026, inside the spent day: the 19:50 UTC pass sent one request,
+read the refusal (its reset named 00:00:00 UTC on the 19th), recorded fifteen
+unasked and a fourteenth failure, and ended in 3 s where the passes before it
+had run 175 s; the 19:55 pass asked the failed hour again from the spare, sent
+nothing, recorded sixteen unasked and ended at once; the watchdog's checks at
+19:52 and 19:56 UTC carried the new text under the open problem and sent
+nothing; and the off-box dead-man read each stamp as the pass.
 
 Coverage limits are operational facts, not caveats: gamma telemetry is the
 European reporting networks republished by the German BfS service (the JRC's own
