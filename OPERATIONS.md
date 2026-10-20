@@ -408,7 +408,34 @@ check and paged at 03:20 UTC with EURDEP's twenty-first under the title
 UTC. From the box at 03:26 UTC, GetCapabilities took 0.6 s and a one-feature
 GetFeature on EURDEP answered the pool error in 20.3 s. The site answered
 throughout, RadNet and the aircraft feed read on time, and the off-box
-dead-man saw the site alive at every probe.
+dead-man saw the site alive at every probe. That outage's last failed EURDEP
+poll was at 21:21 UTC on 16 Oct; 117 polls from 17 Oct to 15:00 UTC on 19 Oct
+read whole, one at 15:35 UTC on 19 Oct answered "DataSource not available" at
+startIndex 1000, and the 29 from 16:10 UTC to 07:35 UTC on 20 Oct read whole.
+The pool starved again from 08:05 UTC on 20 Oct 2026: of EURDEP's 24 polls to
+20:51 UTC two read whole, at 08:41 and 17:36 UTC, and 22 failed, fourteen with
+the pool error (twelve at startIndex 0, two at 2000), two unanswered in 60 s at
+startIndex 0, and six cut at the stage deadline, at startIndex 9000 four times,
+5000 once and 13000 once; a page then took about 25 s, four in flight, so
+thirteen pages filled the stage's 110 s and all eighteen need about 150 s,
+the pace of 16 Oct, and the deadline stays. The German network failed twelve of
+its 24 polls over the same hours and never more than three in a row, so it did
+not page; RadNet and the aircraft feed read every hour. EURDEP's count reached
+six at 12:01 UTC, the 12:02 check saw it and the watchdog paged at 12:06 UTC;
+the whole read at 17:36 UTC reset the count and the recovery note went at 17:46
+UTC; six more failures from 18:05 to 20:51 UTC were a fresh problem and paged
+at 20:56 UTC, due again at 02:56 UTC on 21 Oct on the 6 h schedule. So one
+starvation with one lucky read inside it is two pages and a recovery note,
+as on 15 Oct; a rule on hours unread rather than failures in a row would hold
+the problem through such a read, a change in what a page means that is Xyra's.
+From the box at 21:03 UTC, GetCapabilities took 14.2 s and a one-feature
+GetFeature on EURDEP answered in 85.6 s with numberMatched 17299; from the
+development laptop on another network at 21:04 UTC, GetCapabilities took 28.4 s
+and the one-feature GetFeature answered the pool error after 41.1 s, so the
+wait is the server's, not the box's (CPU pressure 0.2%). The site answered
+throughout; the off-box dead-man's 888 probes in the 30 hours to 21:01 UTC read
+it alive at every one but 14:23 UTC, a single read timeout, one short of its
+pair, alive again at 14:25 UTC, and it paged nothing.
 
 The aircraft feed is a collection too (`adsb.lol`), and a pass fails when any
 of its 16 regions has no sample. adsb.lol refuses requests late in a pass
