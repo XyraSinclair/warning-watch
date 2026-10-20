@@ -56,7 +56,7 @@ def ensure_directories():
 
 def open_db(path):
     pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(path)
+    connection = sqlite3.connect(path, timeout=30)
     connection.row_factory = sqlite3.Row
     connection.executescript(SCHEMA_PATH.read_text("utf8"))
     migrate_schema(connection)
