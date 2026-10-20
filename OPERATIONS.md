@@ -426,8 +426,11 @@ the whole read at 17:36 UTC reset the count and the recovery note went at 17:46
 UTC; six more failures from 18:05 to 20:51 UTC were a fresh problem and paged
 at 20:56 UTC, due again at 02:56 UTC on 21 Oct on the 6 h schedule. So one
 starvation with one lucky read inside it is two pages and a recovery note,
-as on 15 Oct; a rule on hours unread rather than failures in a row would hold
-the problem through such a read, a change in what a page means that is Xyra's.
+as on 15 Oct, and each is true: the whole read made the instrument current,
+so a rule on hours unread would clear at that read as the count did, and the
+only rule that holds through it is a share of whole reads over recent polls,
+the half-of-checks shape that paged falsely twice for NWS and was retired. The
+rule stays.
 From the box at 21:03 UTC, GetCapabilities took 14.2 s and a one-feature
 GetFeature on EURDEP answered in 85.6 s with numberMatched 17299; from the
 development laptop on another network at 21:04 UTC, GetCapabilities took 28.4 s
