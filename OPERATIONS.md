@@ -544,6 +544,34 @@ nothing, recorded sixteen unasked and ended at once; the watchdog's checks at
 19:52 and 19:56 UTC carried the new text under the open problem and sent
 nothing; and the off-box dead-man read each stamp as the pass.
 
+The hourly sweep moved a collision into the refresh. The two-minute refresh
+and the five-minute CBRN pass share every ten-minute mark; before 18 Oct every
+pass ran its sixteen-region sweep first (about 175 s), so `radiation-detect`
+held `ews-main.sqlite` at a time no refresh used. From the deploy at 19:48 UTC
+on 18 Oct 2026 a pass off the hour skips both ingests by cadence in under
+0.1 s and the detector holds the database from about a tenth of a second past
+the minute to seven seconds past, while the refresh's heatmap stage
+(`update_latest_heatmap.py`) reaches its first write at one second past and
+opened the database with Python's default 5 s busy timeout: from 20:00 UTC on
+18 Oct to 21:20 UTC on 20 Oct, 190 of 1,481 refreshes failed the
+`ingest-snapshots-detection` stage with `database is locked` at six seconds
+past the minute (186 of the 246 ten-minute marks off the hour, and four on
+the hour at 20:00 to 23:00 UTC on 18 Oct, when the spent quota made the
+on-hour pass as quick; from 00:00 UTC on 19 Oct the sweep ran first and the
+two never met on the hour), the refresh unit exited 1, and the heatmap caught
+up at the next run two minutes later. Each failure was carried by exactly one
+watchdog check, the one two minutes after it, and absent at the next four, so
+under the half-of-checks rule the problem never opened and nothing paged; the
+one send whose journal line carried the text was the recovery note at 00:12
+UTC on 19 Oct for the adsb.lol quota page, and its body named only the
+cleared problem. Fixed in aadb0da by a 30 s busy timeout on the script's
+connection (`sqlite3.connect(path, timeout=30)`), the hold being seven
+seconds; deployed at 21:16 UTC on 20 Oct 2026 and proven live at 21:30 UTC:
+the pass skipped both ingests, the detector held from 21:30:00 to 21:30:07,
+and the refresh waited on the lock and finished at 21:30:08 with every stage
+ok, where the 21:10 UTC refresh had failed at 21:10:06. The detector's hold
+itself, six to seven seconds to evaluate 5,534 stations, is unchanged.
+
 Coverage limits are operational facts, not caveats: gamma telemetry is the
 European reporting networks republished by the German BfS service (the JRC's own
 EURDEP value service was stale and partly unavailable when this was built — its
