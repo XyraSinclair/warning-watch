@@ -481,6 +481,34 @@ dead-man read it alive at 331 of 332 probes in the eleven hours from 05:11 to
 16:17 UTC, the one miss a read timeout at 15:35 UTC, one short of its pair,
 and paged nothing. Nothing changed: the collector, its deadline and the rule
 stay as recorded above.
+The fifth page came at 20:00 UTC on 21 Oct, the first of this starvation to
+name both networks. Both read whole at 16:40 UTC, the German network in one
+read at 16:40:03 and EURDEP's eighteen pages at 16:40:50, the recovery note
+went at 16:50 UTC, and then each failed six polls in a row: the German
+network at 17:10, 17:45, 18:15, 18:50, 19:26 and 19:55 UTC, five with the
+pool error at startIndex 0 and one at 1000; EURDEP at 17:15, 17:50, 18:21,
+18:50, 19:26 and 19:55 UTC, four with the pool error at startIndex 0, one at
+4000 and one cut at the stage deadline at startIndex 5000. Both counts
+reached six at 19:55 UTC, the 19:56 check first saw them, and the watchdog
+paged at 20:00 UTC, "for 4m" of two instruments unread since 16:40 UTC, due
+again at 02:00 UTC on 22 Oct: the fifth page and fourth recovery note of a
+starvation then 60 hours old. RadNet read every hourly poll and the aircraft
+feed read every hour. From the box at 20:06 UTC, the ingest idle,
+GetCapabilities took 11.6 s where it had taken 0.6 s at 16:12 UTC, and all
+four one-feature GetFeatures were refused with the pool error, EURDEP's in
+39.5 and 36.1 s and the German network's in 20.3 s twice, the pool more
+starved than at any probe since 21:03 UTC on 20 Oct. The site answered
+throughout; the off-box dead-man read it alive at all 119 probes from 16:10
+to 20:07 UTC and paged nothing. What the five pages say of the rule: since
+12:06 UTC on 20 Oct one starvation has paged five times in 32 hours, each
+under a title of minutes, with four recovery notes each followed by a failed
+poll inside the hour, and the day-one escalation to urgent has not fired and
+cannot while the pool yields a whole read every three to eight hours. The one
+rule that would carry a single age through those reads is a memory of cleared
+problems longer than the longest clear, 7 h 30 m from 08:36 to 16:06 UTC,
+and it would trade a fresh incident's three-minute page for a page at the old
+problem's next mark; that trade is Xyra's to choose. Nothing changed: the
+rule stays as recorded above.
 
 The aircraft feed is a collection too (`adsb.lol`), and a pass fails when any
 of its 16 regions has no sample. adsb.lol refuses requests late in a pass
