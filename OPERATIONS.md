@@ -78,7 +78,15 @@ the repair timer runs every 6 hours, which heals aviation history only, and
 the one problem it heals names that repair in its own text. It is over only
 after 10 minutes
 of absence, so a flapping failure neither storms nor hides, and a one-run blip
-of a two-minute unit pages nothing. A failed CBRN run stays in the verdict
+of a two-minute unit pages nothing. A paged problem that returns within a day
+of clearing is the same problem (`MEMORY_MS`, since 21 Oct 2026): it keeps its
+first-seen time and its marks, so it pages at its 6-hour marks and goes urgent
+at a day instead of as a fresh problem at three minutes each time, and a
+return that does not page again sends no second recovery note when it clears.
+The outage that flaps at the hour scale is a source whose server yields one
+whole read every few hours: the BfS pool starvation of 20 and 21 Oct 2026
+paged five times in 32 hours as five fresh problems, each "for 4m", with four
+recovery notes between, and never reached urgent. A failed CBRN run stays in the verdict
 until the next run lands, about seven minutes, so one crashed pass pages
 once. One recovery note goes out when every paged problem has cleared.
 The reason is the record: in the two weeks to 19 Sept 2026 the old
@@ -503,12 +511,27 @@ to 20:07 UTC and paged nothing. What the five pages say of the rule: since
 12:06 UTC on 20 Oct one starvation has paged five times in 32 hours, each
 under a title of minutes, with four recovery notes each followed by a failed
 poll inside the hour, and the day-one escalation to urgent has not fired and
-cannot while the pool yields a whole read every three to eight hours. The one
-rule that would carry a single age through those reads is a memory of cleared
-problems longer than the longest clear, 7 h 30 m from 08:36 to 16:06 UTC,
-and it would trade a fresh incident's three-minute page for a page at the old
-problem's next mark; that trade is Xyra's to choose. Nothing changed: the
-rule stays as recorded above.
+cannot while the pool yields a whole read every three to eight hours. So the
+schedule now remembers a paged problem for a day after it clears
+(`MEMORY_MS` in `ops_alert.js`, longer than this starvation's longest clear,
+7 h 30 m from 08:36 to 16:06 UTC): a return inside that day keeps its
+first-seen time and its marks, and a return that does not page again sends
+no second recovery note when it clears. Replayed on a fake clock over this
+starvation's record, the memory sends the same five pages, at 12:06 and
+20:52 UTC on 20 Oct, 05:06 UTC on 21 Oct, 16:06 UTC urgent "for 1d 4h" as
+the day was crossed, and 20:00 UTC with the German network's first page,
+each titled with the episode's age where the rule before it titled each in
+minutes, and from the day mark on the EURDEP episode pages daily rather than
+at every six-failures count; a fresh problem still pages at three minutes,
+the two-check NWS blip of 9 Oct still pages nothing, and a problem that
+returns 25 hours after clearing is a fresh problem. The cost accepted: a
+problem that returns within six hours of its last page waits for that mark
+instead of paging at three minutes, and a return in the hours before its day
+mark pages on return and again at the crossing. The box's state carried both
+networks first seen at 19:56 UTC, so their marks are 02:00, 08:00 and 14:00
+UTC on 22 Oct and urgent at 19:56 UTC on 22 Oct unless a whole read clears
+them first, after which a return within a day resumes those marks. The
+collector and its deadline stay as recorded above.
 
 The aircraft feed is a collection too (`adsb.lol`), and a pass fails when any
 of its 16 regions has no sample. adsb.lol refuses requests late in a pass

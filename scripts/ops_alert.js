@@ -19,8 +19,17 @@
 //   only after CLEAR_MS of absence, so a flapping failure can neither storm
 //   nor hide. Age alone is not presence: on 9 Oct 2026 one NWS history page
 //   failed at two checks twelve minutes apart, five healthy checks between
-//   them, and that paged as a twelve-minute outage.
-// - Sends one recovery note when every paged problem has cleared.
+//   them, and that paged as a twelve-minute outage. A paged problem that
+//   returns within MEMORY_MS of clearing is the same problem: it keeps its
+//   first-seen time and its schedule. From 20 to 21 Oct 2026 the BfS pool
+//   starvation yielded one whole read every three to eight hours, each read
+//   cleared the six-failures count, and one outage paged five times in 32
+//   hours as five fresh problems, each "for 4m", with four recovery notes
+//   between and never reaching urgent; with the memory it is one problem that
+//   pages on the 6 h marks, goes urgent at a day, and then pages daily.
+// - Sends one recovery note when every paged problem has cleared. The note
+//   closes pages: a remembered problem that returns, does not page again and
+//   clears again sends none.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -33,6 +42,7 @@ const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 const HOLD_MS = 3 * MINUTE_MS;
 const CLEAR_MS = 10 * MINUTE_MS;
+const MEMORY_MS = DAY_MS;
 
 // The text before the first parenthesis names the problem; what follows is
 // that run's measurement or the collector's last error, which changes while
@@ -61,20 +71,28 @@ function decide(previous, problemTexts, nowMs) {
   const seen = new Set();
   for (const text of problemTexts) {
     const key = problemKey(text);
-    records[key] = { firstSeenMs: nowMs, lastPagedMs: null, checks: 0, present: 0, ...records[key], text, lastSeenMs: nowMs };
+    records[key] = { firstSeenMs: nowMs, lastPagedMs: null, notedMs: null, checks: 0, present: 0, ...records[key], text, lastSeenMs: nowMs, clearedMs: null };
     seen.add(key);
   }
   const recovered = [];
   for (const [key, record] of Object.entries(records)) {
-    if (nowMs - record.lastSeenMs >= CLEAR_MS) {
-      if (record.lastPagedMs) recovered.push(record);
-      delete records[key];
+    if (record.clearedMs) {
+      // Remembered, not open: forgotten once it has stayed clear for MEMORY_MS.
+      if (nowMs - record.clearedMs >= MEMORY_MS) delete records[key];
+    } else if (nowMs - record.lastSeenMs >= CLEAR_MS) {
+      if (!record.lastPagedMs) {
+        delete records[key];
+      } else {
+        record.clearedMs = nowMs;
+        if (record.lastPagedMs > (record.notedMs || 0)) recovered.push(record);
+      }
     } else {
       record.checks += 1;
       if (seen.has(key)) record.present += 1;
     }
   }
-  const open = Object.values(records).filter((record) => nowMs - record.firstSeenMs >= HOLD_MS && record.present * 2 >= record.checks);
+  const live = Object.values(records).filter((record) => !record.clearedMs);
+  const open = live.filter((record) => nowMs - record.firstSeenMs >= HOLD_MS && record.present * 2 >= record.checks);
   const present = open.filter((record) => record.lastSeenMs === nowMs);
   const due = present.filter((record) => {
     if (!record.lastPagedMs) return true;
@@ -102,7 +120,7 @@ function decide(previous, problemTexts, nowMs) {
       ].join('\n'),
     };
     for (const record of listed) record.lastPagedMs = nowMs;
-  } else if (recovered.length && !Object.values(records).some((record) => record.lastPagedMs)) {
+  } else if (recovered.length && !live.some((record) => record.lastPagedMs)) {
     page = {
       kind: 'recovery',
       title: 'Warning Watch recovered',
@@ -114,6 +132,7 @@ function decide(previous, problemTexts, nowMs) {
         'Nothing else is open. No action needed.',
       ].join('\n'),
     };
+    for (const record of recovered) record.notedMs = nowMs;
   }
   return { state: { problems: records }, page };
 }
@@ -203,4 +222,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { decide, problemKey, HOLD_MS, CLEAR_MS };
+module.exports = { decide, problemKey, HOLD_MS, CLEAR_MS, MEMORY_MS };
