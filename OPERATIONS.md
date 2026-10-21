@@ -439,6 +439,24 @@ wait is the server's, not the box's (CPU pressure 0.2%). The site answered
 throughout; the off-box dead-man's 888 probes in the 30 hours to 21:01 UTC read
 it alive at every one but 14:23 UTC, a single read timeout, one short of its
 pair, alive again at 14:25 UTC, and it paged nothing.
+The starvation ran on through the night. Of EURDEP's 39 polls from 08:05 UTC
+on 20 Oct to 05:05 UTC on 21 Oct three read whole, at 08:41 and 17:36 UTC on
+20 Oct and 01:41 UTC on 21 Oct, and 36 failed: 22 with the pool error (twenty
+at startIndex 0, two at 2000), three unanswered in 60 s at startIndex 0, and
+eleven cut at the stage deadline between startIndex 5000 and 13000. The
+German network read whole 19 of its 39 and never failed more than three in a
+row (one answer an HTTP 502, at 01:06 UTC), so it did not page; RadNet read
+every one of its 21 hourly polls and the aircraft feed read every hour. The
+whole read at 01:41 UTC reset EURDEP's count, the recovery note went at 01:52
+UTC, and the six failures from 02:15 to 05:05 UTC were a fresh problem, paged
+at 05:10 UTC and due again at 11:10 UTC on 21 Oct: the third page and second
+recovery note of one starvation, as the rule means. From the box at 05:13 UTC
+GetCapabilities took 0.5 s and a one-feature GetFeature on EURDEP answered
+HTTP 200 in 13.9 s, so the pool was serving single requests where at 21:03
+UTC it had taken 85.6 s, and at that pace eighteen pages four in flight still
+fill the 110 s stage. The site answered throughout; the off-box dead-man read
+it alive at 946 of 947 probes in the 32 hours to 05:11 UTC on 21 Oct, the one
+miss the 14:23 UTC read timeout above, and paged nothing.
 
 The aircraft feed is a collection too (`adsb.lol`), and a pass fails when any
 of its 16 regions has no sample. adsb.lol refuses requests late in a pass
@@ -571,6 +589,23 @@ the pass skipped both ingests, the detector held from 21:30:00 to 21:30:07,
 and the refresh waited on the lock and finished at 21:30:08 with every stage
 ok, where the 21:10 UTC refresh had failed at 21:10:06. The detector's hold
 itself, six to seven seconds to evaluate 5,534 stations, is unchanged.
+The same hold caught a second stage: `detect_flight_behaviour.js` writes
+`flight_behaviour_hours` on every refresh through a better-sqlite3 connection
+with the library's default 5 s wait, and when a pass runs long enough to end
+inside a refresh (the two-minute sweep before the hourly cadence of 18 Oct, a
+BfS page held to its 60 s deadline since) the `flight-behaviour` stage failed
+with `SQLITE_BUSY` one to three seconds before the pass's end stamp: four
+times in the journal since 16 Oct, at 11:42 UTC on 16 Oct, 17:54 UTC on 17
+Oct, 10:12 UTC on 18 Oct and 01:06 UTC on 21 Oct, when the 01:05 pass held
+EURDEP's first page to the 60 s deadline, the detector held from 01:06:01 to
+01:06:08 and the 01:06 refresh's stage failed at 01:06:07; each was one
+watchdog check and nothing paged. Reproduced at 05:16 UTC on 21 Oct on a
+scratch copy of the database: under a 9 s write hold the deployed script
+exited 1 with `SQLITE_BUSY` after 5.7 s. Fixed in f49323d by
+`busy_timeout = 30000` on the script's events connection, the wait
+`detect_alert_events.js` and the dispatch stage already set; deployed at
+05:18 UTC and proven on the same copy at once, the script waiting out a 9 s
+hold and finishing ok at 05:18:36 with its 70 aggregate writes.
 
 Coverage limits are operational facts, not caveats: gamma telemetry is the
 European reporting networks republished by the German BfS service (the JRC's own
