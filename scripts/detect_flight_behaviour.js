@@ -306,6 +306,8 @@ function main() {
   let eventsDb;
   try {
     eventsDb = new Database(options.eventsDb, { readonly: options.dryRun, fileMustExist: true });
+    // The radiation detector holds ews-main.sqlite for about seven seconds at the end of a CBRN pass; wait it out rather than fail at better-sqlite3's 5 s default.
+    eventsDb.pragma('busy_timeout = 30000');
     if (!options.dryRun) eventsDb.exec(HOURS_DDL);
     const { events, summary } = detect(db, options, eventsDb);
     if (options.dryRun) {
