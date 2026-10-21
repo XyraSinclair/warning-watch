@@ -457,6 +457,30 @@ UTC it had taken 85.6 s, and at that pace eighteen pages four in flight still
 fill the 110 s stage. The site answered throughout; the off-box dead-man read
 it alive at 946 of 947 probes in the 32 hours to 05:11 UTC on 21 Oct, the one
 miss the 14:23 UTC read timeout above, and paged nothing.
+The fourth page came at 16:10 UTC on 21 Oct. Of EURDEP's 21 polls from 05:05
+to 16:05 UTC three read whole, at 08:26, 11:46 and 12:46 UTC, and 18 failed:
+fourteen with the pool error (twelve at startIndex 0, one at 1000, one at
+4000) and four cut at the stage deadline, all at startIndex 5000. The German
+network read whole 10 of its 21 and failed the four from 14:25 to 16:05 UTC
+in a row, its longest run of this starvation and two short of a page of its
+own; RadNet read every hourly poll and the aircraft feed read every hour. The
+08:26 UTC whole read reset EURDEP's count and the recovery note went at 08:36
+UTC, before the 11:10 UTC re-page fell due; the six failures from 13:20 to
+16:05 UTC were a fresh problem, the 16:06 check first saw the count at six,
+and the watchdog paged at 16:10 UTC, "for 4m" of an instrument unread since
+12:46 UTC, due again at 22:10 UTC: the fourth page and third recovery note of
+a starvation then 56 hours old, each true under the rule above. From the box
+at 16:12 UTC, the ingest idle, GetCapabilities took 0.6 s; a one-feature
+GetFeature on the German network answered HTTP 200 in 30.2 s and again in
+10.5 s, and on EURDEP the pool error in 28.0 s and then HTTP 200 in 27.6 s,
+so a single request still waits 10 to 30 s for a connection and one in four
+is refused, and the collector is not the load: it was idle for both probes
+and the pool error reached the laptop on 20 Oct. BfS's ODL-Info and
+geoportal pages carried no notice. The site answered throughout; the off-box
+dead-man read it alive at 331 of 332 probes in the eleven hours from 05:11 to
+16:17 UTC, the one miss a read timeout at 15:35 UTC, one short of its pair,
+and paged nothing. Nothing changed: the collector, its deadline and the rule
+stay as recorded above.
 
 The aircraft feed is a collection too (`adsb.lol`), and a pass fails when any
 of its 16 regions has no sample. adsb.lol refuses requests late in a pass
