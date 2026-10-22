@@ -49,6 +49,11 @@ function readAlerts(db) {
 function readRadiation(db) {
   if (!db) return { networks: [], reporting: 0, stationsArmed: 0, stationsTotal: 0 };
   try {
+    // The collector's own record of each network: its last whole read and the
+    // failed polls since, so the page can say why a network has no new reading.
+    const runs = new Map(
+      db.prepare("SELECT source, last_success_at, consecutive_failures FROM cbrn_ingest_runs").all().map((row) => [row.source, row]),
+    );
     const networks = db.prepare(
       `SELECT source, COUNT(DISTINCT station_id) AS stations, MAX(observed_at) AS newestReading
          FROM cbrn_readings GROUP BY source ORDER BY source`,
@@ -57,6 +62,8 @@ function readRadiation(db) {
       stations: row.stations,
       newestReading: row.newestReading,
       ageMinutes: minutesSince(row.newestReading),
+      lastRead: runs.get(row.source)?.last_success_at ?? null,
+      failedPolls: runs.get(row.source)?.consecutive_failures ?? 0,
     }));
     // A station can only alert once it carries the minimum baseline itself.
     const armed = db.prepare(

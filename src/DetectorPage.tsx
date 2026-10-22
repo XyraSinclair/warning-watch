@@ -3,7 +3,14 @@ import './detector.css';
 import { Channels, SubscribePanel } from './Subscribe';
 
 type Alert = { kind: string; severity: string; cohort: string; occurredAt: string; title: string; message: string };
-type Network = { source: string; stations: number; newestReading: string | null; ageMinutes: number | null };
+type Network = {
+  source: string;
+  stations: number;
+  newestReading: string | null;
+  ageMinutes: number | null;
+  lastRead: string | null;
+  failedPolls: number;
+};
 type Cohort = { key: string; label: string; roster: number; airborne: number | null; sampledAt: string | null; samples: number };
 
 type Status = {
@@ -49,6 +56,20 @@ const NETWORK_NAMES: Record<string, string> = {
   eurdep: 'Europe, EURDEP exchange',
   radnet: 'United States, EPA RadNet',
 };
+
+// A network with no reading in four hours is not watching, and the page says
+// so and why: its operator's server is refusing our reads, or it publishes
+// nothing newer. The same four hours count a network as reporting in the API.
+function unreadNote(network: Network): string {
+  const cause =
+    network.failedPolls > 0
+      ? `its operator's server has refused or not answered our last ${num.format(network.failedPolls)} reads, the last whole read ${ago(network.lastRead)}`
+      : 'its operator publishes no newer values';
+  return (
+    `${NETWORK_NAMES[network.source] ?? network.source}: no reading since ${utc(network.newestReading)}; ${cause}. ` +
+    'Without readings this network raises no alerts until it answers again.'
+  );
+}
 const SOURCE = 'https://github.com/XyraSinclair/warning-watch/blob/main';
 
 const POLL_MS = 60_000;
@@ -222,6 +243,13 @@ export default function DetectorPage() {
             ))}
           </tbody>
         </table>
+        {(radiation?.networks ?? [])
+          .filter((network) => network.ageMinutes != null && network.ageMinutes > 240)
+          .map((network) => (
+            <p className="fine" key={network.source}>
+              {unreadNote(network)}
+            </p>
+          ))}
       </section>
 
       <section>
