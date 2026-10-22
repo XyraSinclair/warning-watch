@@ -27,6 +27,15 @@
 //   hours as five fresh problems, each "for 4m", with four recovery notes
 //   between and never reaching urgent; with the memory it is one problem that
 //   pages on the 6 h marks, goes urgent at a day, and then pages daily.
+// - A problem that names a third party's network ("cbrn network <source>: N
+//   consecutive collection failures") is theirs to end, not ours: it pages
+//   once at onset, at default priority, and once more when it clears, never
+//   on the marks and never urgent. From 20 to 22 Oct 2026 the BfS pool
+//   starvation paged nine times in 56 hours, the last urgent as it crossed a
+//   day, and sent six recovery notes, for an outage nothing on the box could
+//   end; the public status page carries the gap instead. Everything the box
+//   can mend — a dead timer, a failed stage, every gamma network blind at
+//   once — keeps the full schedule.
 // - Sends one recovery note when every paged problem has cleared. The note
 //   closes pages: a remembered problem that returns, does not page again and
 //   clears again sends none.
@@ -52,6 +61,10 @@ const MEMORY_MS = DAY_MS;
 function problemKey(text) {
   return String(text).replace(/ \(.*$/s, '').replace(/\d+(\.\d+)?/g, '#');
 }
+
+// The problems that name a third party's network (status.js, "cbrn network").
+const UPSTREAM_PREFIX = 'cbrn network ';
+const upstream = (record) => problemKey(record.text).startsWith(UPSTREAM_PREFIX);
 
 function formatAge(ms) {
   if (ms >= DAY_MS) return `${Math.floor(ms / DAY_MS)}d ${Math.floor((ms % DAY_MS) / HOUR_MS)}h`;
@@ -96,6 +109,7 @@ function decide(previous, problemTexts, nowMs) {
   const present = open.filter((record) => record.lastSeenMs === nowMs);
   const due = present.filter((record) => {
     if (!record.lastPagedMs) return true;
+    if (upstream(record)) return false;
     // Crossing one day is itself due: the first urgent page lands at 24 h.
     const escalatesAtMs = record.firstSeenMs + DAY_MS;
     if (nowMs >= escalatesAtMs && record.lastPagedMs < escalatesAtMs) return true;
@@ -105,18 +119,23 @@ function decide(previous, problemTexts, nowMs) {
   let page = null;
   if (due.length) {
     const listed = [...present].sort((left, right) => left.firstSeenMs - right.firstSeenMs);
-    const oldestMs = nowMs - listed[0].firstSeenMs;
+    // The title and priority follow the box's own problems; a page that lists
+    // only a third party's is informational.
+    const ours = listed.filter((record) => !upstream(record));
+    const oldestMs = nowMs - (ours[0] || listed[0]).firstSeenMs;
     page = {
       kind: 'alert',
-      title: oldestMs >= HOUR_MS ? `Warning Watch unhealthy for ${formatAge(oldestMs)}` : 'Warning Watch unhealthy',
-      priority: oldestMs >= DAY_MS ? 'urgent' : 'high',
+      title: !ours.length ? 'Warning Watch: upstream source unread' : oldestMs >= HOUR_MS ? `Warning Watch unhealthy for ${formatAge(oldestMs)}` : 'Warning Watch unhealthy',
+      priority: !ours.length ? 'default' : oldestMs >= DAY_MS ? 'urgent' : 'high',
       body: [
         'Warning Watch on xyra-dev-hetzner:',
         ...listed.map((record) => `- ${record.text} (${formatPresence(record, nowMs)})`),
         '',
-        oldestMs >= DAY_MS
-          ? 'This has outlasted every automatic repair. It needs a person. It will page daily until it clears.'
-          : 'This pages again in 6 hours if it persists.',
+        !ours.length
+          ? "A third party's server is not answering; nothing on the box ends this, and the status page shows the gap. This pages once more when it clears, and not before."
+          : oldestMs >= DAY_MS
+            ? 'This has outlasted every automatic repair. It needs a person. It will page daily until it clears.'
+            : 'This pages again in 6 hours if it persists.',
       ].join('\n'),
     };
     for (const record of listed) record.lastPagedMs = nowMs;
