@@ -2,6 +2,9 @@
 
 const { openCbrnDb, readAlarmState, writeAlarmState, recordIngestRun, nowIso, deadline, unanswered } = require('./cbrn_lib');
 const USER_AGENT = 'Warning.watch/1.0 (https://warning.watch; CBRN public-source watch)';
+// Both gamma networks come from one BfS GeoServer and one database pool
+// behind it; the run record names the endpoint and layer that served a poll.
+const ENDPOINT = 'https://www.imis.bfs.de/ogc/opendata/ows';
 const NETWORKS = { de: 'odlinfo_odl_1h_latest', eurdep: 'eurdep_latestValue', radnet: null };
 // EPA RadNet: one CSV per monitor per month (about 75 KB at month end), hourly
 // readings stamped in UTC, published 30-60 minutes after the hour. The service
@@ -18,11 +21,11 @@ const MAX_BYTES = 16 * 1024 * 1024;
 const MAX_FEATURES = 30000;
 
 function options(argv) {
-  const result = { db: process.env.EWS_CBRN_DB_PATH, networks: ['de', 'eurdep', 'radnet'], minIntervalMinutes: 30, months: 1, force: false };
+  const result = { db: process.env.EWS_CBRN_DB_PATH, networks: ['de', 'eurdep', 'radnet'], minIntervalMinutes: 30, months: 1, budgetMinutes: DEFAULT_BUDGET_MINUTES, force: false };
   // cbrn_refresh.js tells each stage when it will be killed; a run by hand has no such time.
   result.killAt = process.env.EWS_STAGE_KILL_AT === undefined ? Infinity : Number(process.env.EWS_STAGE_KILL_AT);
   if (Number.isNaN(result.killAt)) throw new Error('EWS_STAGE_KILL_AT must be epoch milliseconds.');
-  const names = { '--db': 'db', '--networks': 'networks', '--min-interval-minutes': 'minIntervalMinutes', '--months': 'months' };
+  const names = { '--db': 'db', '--networks': 'networks', '--min-interval-minutes': 'minIntervalMinutes', '--months': 'months', '--budget-minutes': 'budgetMinutes' };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--force') result.force = true;
@@ -37,30 +40,44 @@ function options(argv) {
   if (!Number.isSafeInteger(result.months) || result.months < 1 || result.months > 3) throw new Error('--months must be 1, 2 or 3.');
   result.minIntervalMinutes = Number(result.minIntervalMinutes);
   if (!Number.isFinite(result.minIntervalMinutes) || result.minIntervalMinutes < 30) throw new Error('--min-interval-minutes must be at least 30.');
+  result.budgetMinutes = Number(result.budgetMinutes);
+  if (!Number.isFinite(result.budgetMinutes) || result.budgetMinutes <= 0 || result.budgetMinutes > 60) throw new Error('--budget-minutes must be between 0 and 60.');
   return result;
 }
 
 // The BfS WFS returns at most 1000 features per request whatever count asks
 // for (measured 2026-10-03; EURDEP is 17085 rows, five window labels per
-// station), so every network is read in id-sorted pages, four at a time, the
-// networks side by side, and the pages must add up to the server's own
-// numberMatched: fewer is a truncated read. The latest-value views also move while they are read, as an
-// hour's values land: at 15:05 UTC on 10 Oct 2026 EURDEP grew from 17239 to
-// 17883 rows between the first page and the last, the one such read in 220
-// polls since 5 Oct. A read whose pages do not sum is taken once more from the
-// start, and only a second mismatch fails the poll.
+// station), so every network is read in id-sorted pages, and the pages must
+// add up to the server's own numberMatched: fewer is a truncated read. The
+// latest-value views also move while they are read, as an hour's values land:
+// at 15:05 UTC on 10 Oct 2026 EURDEP grew from 17239 to 17883 rows between
+// the first page and the last, the one such read in 220 polls since 5 Oct. A
+// read whose pages do not sum is taken once more from the start, and only a
+// second mismatch fails the poll.
 const PAGE = 1000;
 const READS = 2;
-// The stage is killed (SIGKILL) at EWS_STAGE_KILL_AT, 120 s after it starts,
-// and a poll it has not recorded by then is lost: its network's failure count
-// does not move and the pass shows "spawnSync ETIMEDOUT" in place of the
-// cause. Until 15 Oct 2026 the networks were read one after another, so when
-// the BfS pool was starved the German network's 60 s and EURDEP's 60 s met the
-// deadline exactly and EURDEP's poll went unrecorded at 09:35 and 10:05 UTC.
-// Now every request ends this long before the kill, and the networks are read
-// together, so a starved server costs one page deadline, not one per network.
+// One request is in flight at a time, a page is waited for, and a page the
+// server refuses or does not answer is asked for again after a growing wait,
+// for as long as the poll's budget lasts. From 08:05 UTC on 20 Oct 2026 the
+// BfS database pool was starved: a GetFeature on either latest-value view
+// waited 20 s for "Unable to obtain connection: Cannot get a connection, pool
+// error Timeout waiting for idle object" or ran past a minute even for one
+// feature, a one-row table took 12 s, and BfS's own odlinfo map, which reads
+// the same layer from the same endpoint, drew nothing. Until 22 Oct this
+// reader asked four pages at once per network, both networks at once, and
+// abandoned every request at 60 s; a query the client abandons runs on in the
+// database, so each poll left the pool busier for everyone, this reader
+// included. The pool's own wait is 20 s, so a refused page is not asked for
+// again at once. A poll by hand or from warning-watch-bfs.service has
+// --budget-minutes (25 in the unit); inside a cbrn_refresh stage the kill
+// time, EWS_STAGE_KILL_AT, is the budget's end less a margin, since a poll not
+// recorded by the kill is lost: its failure count does not move and the pass
+// shows "spawnSync ETIMEDOUT" in place of the cause.
+const DEFAULT_BUDGET_MINUTES = 25;
 const STAGE_MARGIN_MS = 10_000;
-const PAGE_DEADLINE_MS = 60_000;
+const PAGE_DEADLINE_MS = 180_000;
+const RETRY_WAITS_MS = [30_000, 60_000, 120_000, 240_000];
+const LEAST_ASK_MS = 25_000;
 const RADNET_DEADLINE_MS = 30_000;
 
 // GeoServer answers a failure it cannot name as HTTP 400 with an OWS
@@ -77,18 +94,52 @@ async function exceptionText(response) {
   return match ? `: ${match[1].trim().split('\n')[0].slice(0, 200)}` : '';
 }
 
-// A page unanswered within the deadline is named by its startIndex, not by the
-// runtime's "The operation was aborted due to timeout".
-function fetchPage(network, startIndex, stage) {
-  const started = Date.now();
-  return readPage(network, startIndex, stage).catch((error) => { throw error.name === 'TimeoutError' ? new Error(`WFS page at startIndex ${startIndex} ${unanswered(started, stage)}`) : error; });
+// The poll's budget and its ledger: every request made, how many the server
+// refused (its own exception, the pool error among them) or left unanswered
+// within the page deadline, the time spent waiting between asks, and the last
+// cause. The ledger goes into the run record whether the poll succeeds or
+// fails, so the record says what the read cost and not only that it happened.
+function budgetFor(untilMs) {
+  return { untilMs, startedMs: Date.now(), requests: 0, refused: 0, unanswered: 0, waitedMs: 0, lastCause: null };
 }
 
-async function readPage(network, startIndex, stage) {
-  const url = new URL('https://www.imis.bfs.de/ogc/opendata/ows');
+function ledger(budget) {
+  return { requests: budget.requests, refused: budget.refused, unanswered: budget.unanswered, waited_ms: budget.waitedMs, elapsed_ms: Date.now() - budget.startedMs };
+}
+
+function spent(budget) {
+  return `${budget.requests} page request${budget.requests === 1 ? "" : "s"} over ${Math.round((Date.now() - budget.startedMs) / 6000) / 10} min: ${budget.refused} refused, ${budget.unanswered} unanswered`;
+}
+
+// A page is asked for until it is served or the budget cannot hold another
+// ask; a page unanswered within its deadline is named by its startIndex, not
+// by the runtime's "The operation was aborted due to timeout". Only the
+// server's failures and the network's are asked again: a body this reader
+// cannot accept is not the server's refusal and fails the poll at once.
+async function fetchPage(network, startIndex, budget) {
+  for (let attempt = 0; ; attempt += 1) {
+    const started = Date.now();
+    if (budget.untilMs - started < LEAST_ASK_MS) throw new Error(`${spent(budget)}; no time left for startIndex ${startIndex}${budget.lastCause ? `; last: ${budget.lastCause}` : ''}`);
+    budget.requests += 1;
+    try { return await readPage(network, startIndex, Math.min(PAGE_DEADLINE_MS, budget.untilMs - started)); }
+    catch (error) {
+      if (error.name === 'TimeoutError') { budget.unanswered += 1; budget.lastCause = `WFS page at startIndex ${startIndex} unanswered in ${Math.round((Date.now() - started) / 1000)} s`; }
+      else if (error.refused) { budget.refused += 1; budget.lastCause = error.message; }
+      else if (error.name === 'TypeError') budget.lastCause = `${error.message}${error.cause?.code ? ` (${error.cause.code})` : ''} at startIndex ${startIndex}`;
+      else throw error;
+      const wait = RETRY_WAITS_MS[Math.min(attempt, RETRY_WAITS_MS.length - 1)];
+      if (Date.now() + wait + LEAST_ASK_MS > budget.untilMs) throw new Error(`${spent(budget)}; last: ${budget.lastCause}`);
+      await new Promise((resolve) => setTimeout(resolve, wait));
+      budget.waitedMs += wait;
+    }
+  }
+}
+
+async function readPage(network, startIndex, deadlineMs) {
+  const url = new URL(ENDPOINT);
   url.search = new URLSearchParams({ service: 'WFS', version: '2.0.0', request: 'GetFeature', typeName: `opendata:${NETWORKS[network]}`, outputFormat: 'application/json', propertyName: PROPERTIES, sortBy: 'id', count: String(PAGE), startIndex: String(startIndex) }).toString();
-  const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT, 'Accept-Encoding': 'gzip' }, signal: deadline(PAGE_DEADLINE_MS, stage) });
-  if (!response.ok) throw new Error(`WFS HTTP ${response.status} at startIndex ${startIndex}${await exceptionText(response)}`);
+  const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT, 'Accept-Encoding': 'gzip' }, signal: AbortSignal.timeout(deadlineMs) });
+  if (!response.ok) throw Object.assign(new Error(`WFS HTTP ${response.status} at startIndex ${startIndex}${await exceptionText(response)}`), { refused: true });
   const chunks = [];
   let bytes = 0;
   for await (const chunk of response.body) {
@@ -101,25 +152,14 @@ async function readPage(network, startIndex, stage) {
   return { data, bytes, contentEncoding: response.headers.get('content-encoding'), wireBytes: response.headers.get('content-length') };
 }
 
-async function fetchNetwork(network, stage) {
+async function fetchNetwork(network, budget) {
   for (let read = 1; ; read += 1) {
-    const first = await fetchPage(network, 0, stage);
-    const matched = first.data.numberMatched;
+    const pages = [await fetchPage(network, 0, budget)];
+    const matched = pages[0].data.numberMatched;
     if (!matched || matched > MAX_FEATURES) throw new Error(`WFS numberMatched ${matched} is empty or oversized`);
-    const starts = [];
-    for (let start = PAGE; start < matched; start += PAGE) starts.push(start);
-    const pages = [first, ...new Array(starts.length)];
-    let next = 0;
-    const worker = async () => {
-      while (next < starts.length) {
-        const index = next;
-        next += 1;
-        pages[index + 1] = await fetchPage(network, starts[index], stage);
-      }
-    };
-    await Promise.all(Array.from({ length: 4 }, worker));
+    for (let start = PAGE; start < matched; start += PAGE) pages.push(await fetchPage(network, start, budget));
     const features = pages.flatMap((page) => page.data.features);
-    if (features.length === matched) return { data: { type: 'FeatureCollection', features }, bytes: pages.reduce((sum, page) => sum + page.bytes, 0), pages: pages.length, reads: read, contentEncoding: first.contentEncoding, wireBytes: first.wireBytes };
+    if (features.length === matched) return { data: { type: 'FeatureCollection', features }, bytes: pages.reduce((sum, page) => sum + page.bytes, 0), pages: pages.length, reads: read, contentEncoding: pages[0].contentEncoding, wireBytes: pages[0].wireBytes, ...ledger(budget) };
     if (read === READS) throw new Error(`WFS pages returned ${features.length} of ${matched} features on read ${read}`);
   }
 }
@@ -162,7 +202,7 @@ function ingestCollection(db, network, result, now = Date.now()) {
   const returnedKnown = rows.filter((row) => roster.has(row.id)).length;
   const partial = roster.size > 0 && returnedKnown < 0.8 * roster.size;
   const stale = !newest || now - Date.parse(newest) > 3 * 3600000;
-  const detail = { features: result.data.features.length, stations: rows.length, readings: rows.length - invalidReadings, invalid_readings: invalidReadings, unplaced: unplaced.length, unplaced_ids: unplaced.slice(0, 10), roster: roster.size, returned_known: returnedKnown, shortfall: roster.size - returnedKnown, partial, stale, newest, bytes: result.bytes, pages: result.pages, reads: result.reads, content_encoding: result.contentEncoding, wire_bytes: result.wireBytes, statuses };
+  const detail = { endpoint: ENDPOINT, layer: `opendata:${NETWORKS[network]}`, features: result.data.features.length, stations: rows.length, readings: rows.length - invalidReadings, invalid_readings: invalidReadings, unplaced: unplaced.length, unplaced_ids: unplaced.slice(0, 10), roster: roster.size, returned_known: returnedKnown, shortfall: roster.size - returnedKnown, partial, stale, newest, bytes: result.bytes, pages: result.pages, reads: result.reads, requests: result.requests, refused: result.refused, unanswered: result.unanswered, waited_ms: result.waited_ms, elapsed_ms: result.elapsed_ms, content_encoding: result.contentEncoding, wire_bytes: result.wireBytes, statuses };
   return store(db, network, rows, detail);
 }
 
@@ -259,9 +299,14 @@ function store(db, network, rows, detail) {
 async function main() {
   const settings = options(process.argv.slice(2));
   const db = openCbrnDb({ dbPath: settings.db });
-  const stage = settings.killAt === Infinity ? null : AbortSignal.timeout(Math.max(0, settings.killAt - STAGE_MARGIN_MS - Date.now()));
+  const stageUntil = settings.killAt === Infinity ? Infinity : settings.killAt - STAGE_MARGIN_MS;
+  const stage = stageUntil === Infinity ? null : AbortSignal.timeout(Math.max(0, stageUntil - Date.now()));
+  const untilMs = Math.min(stageUntil, Date.now() + settings.budgetMinutes * 60000);
   const poll = async (network) => {
     const now = Date.now();
+    // A BfS network the budget cannot reach is not asked, not counted and not
+    // stamped: it is first in line at the next run.
+    if (network !== 'radnet' && untilMs - now < LEAST_ASK_MS) return { network, skipped: 'budget' };
     const allowed = db.transaction(() => {
       const previous = readAlarmState(db, `ingest:${network}`, 'cadence');
       if (!settings.force && previous && now - Date.parse(previous.polled_at) < Math.max(settings.minIntervalMinutes, MIN_INTERVAL_FLOOR[network] || 0) * 60000) return false;
@@ -276,16 +321,24 @@ async function main() {
     // while the other two reported, and a longer outage was a fresh problem
     // to the watchdog at every failed poll. The stage fails only when it
     // cannot run.
-    try { return network === 'radnet' ? ingestRadnet(db, await fetchRadnet(settings.months, Date.now(), stage)) : ingestCollection(db, network, await fetchNetwork(network, stage)); }
+    const budget = network === 'radnet' ? null : budgetFor(untilMs);
+    try { return network === 'radnet' ? ingestRadnet(db, await fetchRadnet(settings.months, Date.now(), stage)) : ingestCollection(db, network, await fetchNetwork(network, budget)); }
     catch (error) {
       const roster = db.prepare('SELECT COUNT(*) AS n FROM cbrn_stations WHERE source = ?').get(network).n;
-      const detail = { roster, returned_known: 0, shortfall: roster, failed: true };
+      const detail = { roster, returned_known: 0, shortfall: roster, failed: true, ...(budget ? { endpoint: ENDPOINT, layer: `opendata:${NETWORKS[network]}`, ...ledger(budget) } : {}) };
       recordIngestRun(db, { source: network, ok: false, error: error.message, detail });
       return { network, ok: false, error: error.message, ...detail };
     }
   };
+  // The BfS networks share the endpoint and its pool, so they are read one
+  // after the other, the one unread longest first, and the reader holds one
+  // connection at most; RadNet is another service and is read beside them.
+  const lastSuccess = new Map(db.prepare('SELECT source, last_success_at FROM cbrn_ingest_runs').all().map((row) => [row.source, row.last_success_at ?? '']));
+  const bfs = settings.networks.filter((network) => network !== 'radnet').sort((left, right) => (lastSuccess.get(left) ?? '').localeCompare(lastSuccess.get(right) ?? ''));
+  const inTurn = async () => { const results = []; for (const network of bfs) results.push(await poll(network)); return results; };
   try {
-    console.log(JSON.stringify({ networks: await Promise.all(settings.networks.map(poll)) }));
+    const results = await Promise.all([inTurn(), ...settings.networks.filter((network) => network === 'radnet').map(poll)]);
+    console.log(JSON.stringify({ networks: results.flat() }));
   } finally { db.close(); }
 }
 

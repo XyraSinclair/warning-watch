@@ -1,0 +1,11 @@
+[Unit]
+Description=Read the BfS gamma networks (German ODL and EURDEP) every five minutes, one page at a time
+
+[Timer]
+OnCalendar=*-*-* *:00/5:00
+AccuracySec=1s
+Persistent=true
+Unit=warning-watch-bfs.service
+
+[Install]
+WantedBy=timers.target

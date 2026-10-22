@@ -140,6 +140,8 @@ function serviceStates() {
     systemdState('warning-watch-selftest.service'),
     systemdState('warning-watch-cbrn.timer'),
     systemdState('warning-watch-cbrn.service'),
+    systemdState('warning-watch-bfs.timer'),
+    systemdState('warning-watch-bfs.service'),
   ];
 }
 

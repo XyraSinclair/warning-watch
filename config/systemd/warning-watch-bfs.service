@@ -1,0 +1,16 @@
+[Unit]
+Description=Read the BfS gamma networks (German ODL and EURDEP) one page at a time, within a 25-minute budget
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=xyra
+WorkingDirectory=/opt/dev/warning-watch
+EnvironmentFile=/etc/warning-watch.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/flock -s -w 60 tmp/deploy.flock /usr/bin/node scripts/ingest_cbrn_radiation.js --networks de,eurdep --budget-minutes 25
+TimeoutStartSec=1680
+TimeoutStopSec=5
+KillMode=control-group
+NoNewPrivileges=true

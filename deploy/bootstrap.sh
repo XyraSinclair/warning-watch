@@ -133,8 +133,8 @@ systemctl enable --now ntfy
 [ -f /etc/cloudflared/token ] && systemctl enable --now cloudflared \
   || echo "HOLD: cloudflared not started (no token yet)"
 systemctl enable --now warning-watch.service
-for timer in refresh refresh-imports repair backup watchdog canary sources cbrn selftest; do
-  systemctl enable --now "warning-watch-$timer.timer"
+for f in "$TARGET"/config/systemd/*.timer; do
+  systemctl enable --now "$(basename "$f")"
 done
 
 echo "--- verify"

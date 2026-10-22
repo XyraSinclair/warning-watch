@@ -42,7 +42,7 @@ const skipIngest = args.has('--skip-ingest');
 
 // name -> [script, argv tail builder]
 const STAGES = [
-  ['radiation-ingest', 'ingest_cbrn_radiation.js', () => ['--db', CBRN_DB]],
+  ['radiation-ingest', 'ingest_cbrn_radiation.js', () => ['--db', CBRN_DB, '--networks', 'radnet']],
   ['aircraft-ingest', 'ingest_cbrn_aircraft.js', () => ['--db', CBRN_DB, '--events-db', MAIN_DB, '--regions', REGIONS_PATH, '--once']],
   ['radiation-detect', 'detect_cbrn_radiation.js', () => ['--db', CBRN_DB, '--events-db', MAIN_DB]],
   ['airspace-detect', 'detect_cbrn_airspace.js', () => ['--db', CBRN_DB, '--events-db', MAIN_DB]],
