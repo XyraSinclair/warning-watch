@@ -477,7 +477,7 @@ UTC, before the 11:10 UTC re-page fell due; the six failures from 13:20 to
 16:05 UTC were a fresh problem, the 16:06 check first saw the count at six,
 and the watchdog paged at 16:10 UTC, "for 4m" of an instrument unread since
 12:46 UTC, due again at 22:10 UTC: the fourth page and third recovery note of
-a starvation then 56 hours old, each true under the rule above. From the box
+a starvation then 32 hours old, each true under the rule above. From the box
 at 16:12 UTC, the ingest idle, GetCapabilities took 0.6 s; a one-feature
 GetFeature on the German network answered HTTP 200 in 30.2 s and again in
 10.5 s, and on EURDEP the pool error in 28.0 s and then HTTP 200 in 27.6 s,
@@ -500,7 +500,7 @@ pool error at startIndex 0 and one at 1000; EURDEP at 17:15, 17:50, 18:21,
 reached six at 19:55 UTC, the 19:56 check first saw them, and the watchdog
 paged at 20:00 UTC, "for 4m" of two instruments unread since 16:40 UTC, due
 again at 02:00 UTC on 22 Oct: the fifth page and fourth recovery note of a
-starvation then 60 hours old. RadNet read every hourly poll and the aircraft
+starvation then 36 hours old. RadNet read every hourly poll and the aircraft
 feed read every hour. From the box at 20:06 UTC, the ingest idle,
 GetCapabilities took 11.6 s where it had taken 0.6 s at 16:12 UTC, and all
 four one-feature GetFeatures were refused with the pool error, EURDEP's in
@@ -587,6 +587,37 @@ urgent at 19:56 UTC on 22 Oct as the day is crossed, and daily after, unless
 a whole read clears both, after which a return within a day resumes them.
 Nothing changed: the collector, its deadline and the schedule stay as
 recorded above.
+
+The eighth page came at 14:16 UTC on 22 Oct, "Warning Watch unhealthy for
+18h 20m" at high, on the return after the 14:00 UTC mark the record above
+named. Both networks failed the 08:30, 09:05, 09:40 and 10:15 UTC polls with
+the pool error at startIndex 0, then both read whole at 10:51 UTC, the first
+whole read on either since 03:35 UTC, closing a 7 h 16 m run. The whole read
+cleared both counts; the watchdog saw both problems absent from the 10:52 UTC
+check and sent the recovery note at 11:02 UTC, the sixth of this starvation.
+Then the German network failed the six polls from 11:25 to 14:15 UTC (11:25,
+12:00, 12:35, 13:10, 13:40 and 14:15 UTC) and EURDEP the same six, every one
+with the pool error at startIndex 0. The 6 h mark after the 08:02 page fell at
+14:02 UTC while both were absent, the counts at five, so it sent nothing; both
+counts reached six at 14:15 UTC, the 14:16 check saw the return inside the
+day's memory, the same problem first seen at 19:56 UTC on 21 Oct, and paged at
+once, both problems present at 351 of 360 checks over 18 h 20 m. RadNet read
+all six hourly polls from 08:40 to 13:50 UTC, the aircraft feed every one of
+the 76 passes from 08:00 to 14:15 UTC, and no stage failed. From the box at
+14:18 to 14:22 UTC, the ingest idle, GetCapabilities took 0.4 to 0.5 s and
+all six one-feature GetFeatures were refused with the pool error in 20.2 to
+20.3 s each, the pool handing out no connection at all, as at 02:04 UTC, where
+at 08:05 UTC it had served one in six; odlinfo.bfs.de carried no notice. The
+site answered throughout; the off-box dead-man read it alive at all 187 probes
+from 08:00 to 14:17 UTC and paged nothing. The starvation that began at 08:05
+UTC on 20 Oct was then 54 hours old; the fourth and fifth records above first
+gave its age a day too long, 56 and 60 hours for 32 and 36, corrected with
+this record. The marks ahead are urgent at 19:56 UTC on 22 Oct as the day is
+crossed, the next 6 h mark at 20:16 UTC falling after it, and daily after at
+urgent, unless a whole read clears both, after which a return within a day
+resumes them; a whole read now sends a recovery note after ten minutes, the
+14:16 page being newer than the 11:02 note. Nothing changed: the collector,
+its deadline and the schedule stay as recorded above.
 
 The aircraft feed is a collection too (`adsb.lol`), and a pass fails when any
 of its 16 regions has no sample. adsb.lol refuses requests late in a pass
