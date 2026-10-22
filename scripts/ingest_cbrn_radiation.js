@@ -6,6 +6,13 @@ const USER_AGENT = 'Warning.watch/1.0 (https://warning.watch; CBRN public-source
 // behind it; the run record names the endpoint and layer that served a poll.
 const ENDPOINT = 'https://www.imis.bfs.de/ogc/opendata/ows';
 const NETWORKS = { de: 'odlinfo_odl_1h_latest', eurdep: 'eurdep_latestValue', radnet: null };
+// EURDEP's latest-value view lists a station once per analysis window it has a
+// value in (6, 12, 24, 48 and 72 h, identical rows), and the 72 h window holds
+// every station: measured 22 Oct 2026, 3635 rows with this filter against
+// 17618 without, and 3635 stations on our roster had a reading in the last
+// three days. Four pages instead of eighteen from a database pool that was
+// handing out one connection in six.
+const FILTERS = { eurdep: 'analyzed_range_in_h=72' };
 // EPA RadNet: one CSV per monitor per month (about 75 KB at month end), hourly
 // readings stamped in UTC, published 30-60 minutes after the hour. The service
 // ignores Range and gzip, and the whole-year file is ten times the size, so a
@@ -46,8 +53,8 @@ function options(argv) {
 }
 
 // The BfS WFS returns at most 1000 features per request whatever count asks
-// for (measured 2026-10-03; EURDEP is 17085 rows, five window labels per
-// station), so every network is read in id-sorted pages, and the pages must
+// for (measured 2026-10-03; the German network is 1677 rows and EURDEP, held
+// to one window, 3635), so every network is read in id-sorted pages, and the pages must
 // add up to the server's own numberMatched: fewer is a truncated read. The
 // latest-value views also move while they are read, as an hour's values land:
 // at 15:05 UTC on 10 Oct 2026 EURDEP grew from 17239 to 17883 rows between
@@ -137,7 +144,7 @@ async function fetchPage(network, startIndex, budget) {
 
 async function readPage(network, startIndex, deadlineMs) {
   const url = new URL(ENDPOINT);
-  url.search = new URLSearchParams({ service: 'WFS', version: '2.0.0', request: 'GetFeature', typeName: `opendata:${NETWORKS[network]}`, outputFormat: 'application/json', propertyName: PROPERTIES, sortBy: 'id', count: String(PAGE), startIndex: String(startIndex) }).toString();
+  url.search = new URLSearchParams({ service: 'WFS', version: '2.0.0', request: 'GetFeature', typeName: `opendata:${NETWORKS[network]}`, outputFormat: 'application/json', propertyName: PROPERTIES, sortBy: 'id', count: String(PAGE), startIndex: String(startIndex), ...(FILTERS[network] ? { CQL_FILTER: FILTERS[network] } : {}) }).toString();
   const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT, 'Accept-Encoding': 'gzip' }, signal: AbortSignal.timeout(deadlineMs) });
   if (!response.ok) throw Object.assign(new Error(`WFS HTTP ${response.status} at startIndex ${startIndex}${await exceptionText(response)}`), { refused: true });
   const chunks = [];
@@ -202,7 +209,7 @@ function ingestCollection(db, network, result, now = Date.now()) {
   const returnedKnown = rows.filter((row) => roster.has(row.id)).length;
   const partial = roster.size > 0 && returnedKnown < 0.8 * roster.size;
   const stale = !newest || now - Date.parse(newest) > 3 * 3600000;
-  const detail = { endpoint: ENDPOINT, layer: `opendata:${NETWORKS[network]}`, features: result.data.features.length, stations: rows.length, readings: rows.length - invalidReadings, invalid_readings: invalidReadings, unplaced: unplaced.length, unplaced_ids: unplaced.slice(0, 10), roster: roster.size, returned_known: returnedKnown, shortfall: roster.size - returnedKnown, partial, stale, newest, bytes: result.bytes, pages: result.pages, reads: result.reads, requests: result.requests, refused: result.refused, unanswered: result.unanswered, waited_ms: result.waited_ms, elapsed_ms: result.elapsed_ms, content_encoding: result.contentEncoding, wire_bytes: result.wireBytes, statuses };
+  const detail = { endpoint: ENDPOINT, layer: `opendata:${NETWORKS[network]}`, filter: FILTERS[network] ?? null, features: result.data.features.length, stations: rows.length, readings: rows.length - invalidReadings, invalid_readings: invalidReadings, unplaced: unplaced.length, unplaced_ids: unplaced.slice(0, 10), roster: roster.size, returned_known: returnedKnown, shortfall: roster.size - returnedKnown, partial, stale, newest, bytes: result.bytes, pages: result.pages, reads: result.reads, requests: result.requests, refused: result.refused, unanswered: result.unanswered, waited_ms: result.waited_ms, elapsed_ms: result.elapsed_ms, content_encoding: result.contentEncoding, wire_bytes: result.wireBytes, statuses };
   return store(db, network, rows, detail);
 }
 
@@ -325,7 +332,7 @@ async function main() {
     try { return network === 'radnet' ? ingestRadnet(db, await fetchRadnet(settings.months, Date.now(), stage)) : ingestCollection(db, network, await fetchNetwork(network, budget)); }
     catch (error) {
       const roster = db.prepare('SELECT COUNT(*) AS n FROM cbrn_stations WHERE source = ?').get(network).n;
-      const detail = { roster, returned_known: 0, shortfall: roster, failed: true, ...(budget ? { endpoint: ENDPOINT, layer: `opendata:${NETWORKS[network]}`, ...ledger(budget) } : {}) };
+      const detail = { roster, returned_known: 0, shortfall: roster, failed: true, ...(budget ? { endpoint: ENDPOINT, layer: `opendata:${NETWORKS[network]}`, filter: FILTERS[network] ?? null, ...ledger(budget) } : {}) };
       recordIngestRun(db, { source: network, ok: false, error: error.message, detail });
       return { network, ok: false, error: error.message, ...detail };
     }
