@@ -532,6 +532,33 @@ networks first seen at 19:56 UTC, so their marks are 02:00, 08:00 and 14:00
 UTC on 22 Oct and urgent at 19:56 UTC on 22 Oct unless a whole read clears
 them first, after which a return within a day resumes those marks. The
 collector and its deadline stay as recorded above.
+The sixth page came at 02:00 UTC on 22 Oct, "Warning Watch unhealthy for
+6h 4m" at high, the first since the memory landed and one the rule before it
+would have sent the same, since no whole read came to clear the count.
+Neither network read once after 16:40 UTC: the German network failed all
+sixteen polls from 17:10 UTC on 21 Oct to 01:25 UTC on 22 Oct, every one with
+the pool error, fourteen at startIndex 0 and two at 1000 (19:26 and 20:25
+UTC); EURDEP failed all sixteen from 17:15 to 01:25 UTC, fifteen with the
+pool error (thirteen at startIndex 0, one at 4000 at 18:21 UTC, one at 1000
+at 20:25 UTC) and one cut at the stage deadline at startIndex 5000 at 19:26
+UTC; and both failed a seventeenth at 02:00 UTC with the pool error at
+startIndex 0. That is 9 h 20 m without a whole read on either network, the
+longest run of this starvation: EURDEP's longest before it, 08:41 to 17:36
+UTC on 20 Oct, was 8 h 55 m, and the German network's was six polls. RadNet
+read every one of its nine hourly polls, the aircraft feed every one of the
+116 passes since 16:30 UTC, and no stage failed. The watchdog saw both
+problems at all 184 checks from 19:56 UTC, the 6 h mark fell at 02:00:01 UTC
+and it paged; the marks ahead are 08:00 and 14:00 UTC, urgent at 19:56 UTC
+on 22 Oct as the day is crossed, and daily after, unless a whole read clears
+both, after which a return within a day resumes them. From the box at 02:04
+UTC, the ingest idle, GetCapabilities took 0.5 s and all four one-feature
+GetFeatures were refused with the pool error in 20.2 to 20.3 s each, a fixed
+wait that reads as the pool's own timeout, so the pool is handing out no
+connection at all, where at 20:06 UTC it had taken 20 to 40 s to refuse and
+at 16:12 UTC had served three of four; odlinfo.bfs.de carried no notice. The
+site answered throughout; the off-box dead-man read it alive at all 176
+probes from 20:07 to 02:03 UTC and paged nothing. Nothing changed: the
+collector, its deadline and the schedule stay as recorded above.
 
 The aircraft feed is a collection too (`adsb.lol`), and a pass fails when any
 of its 16 regions has no sample. adsb.lol refuses requests late in a pass
