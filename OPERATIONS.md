@@ -89,6 +89,21 @@ paged five times in 32 hours as five fresh problems, each "for 4m", with four
 recovery notes between, and never reached urgent. A failed CBRN run stays in the verdict
 until the next run lands, about seven minutes, so one crashed pass pages
 once. One recovery note goes out when every paged problem has cleared.
+A problem that names a third party's network (`cbrn network <source>`: the
+two BfS networks and the adsb.lol feed; since 22 Oct 2026) is theirs to end,
+not ours: it pages once at onset, at default priority and titled as an
+upstream source unread, and once more when it clears, never on the marks and
+never urgent; the note goes at the first clearing, and later returns and
+clearings inside the day's memory are silent. A page that lists a problem of
+the box's beside it takes its title and priority from the box's own. The BfS
+pool starvation of 20 to 22 Oct 2026 had paged nine times in 56 hours, the
+last five urgent, with six recovery notes, for an outage nothing on the box
+could end; replayed over the 3,479 checks from 18 to 22 Oct the old rule
+sends 26 notes and this sends 12, that starvation four: a page at 12:06 UTC
+on 20 Oct when EURDEP failed its sixth poll, its recovery note at 17:46 UTC, a
+page at 20:00 UTC on 21 Oct when the German network first failed its sixth,
+and the recovery note at 03:44 UTC on 22 Oct. The public status page carries
+the gap instead (see the CBRN watch section).
 The reason is the record: in the two weeks to 19 Sept 2026 the old
 hash-of-the-whole-set rule sent about 150 pages (a false pair every night while
 the backup was mid-write, bursts every two minutes from a minute counter in the
@@ -124,10 +139,11 @@ token).
 | `warning-watch.service` | `server/index.js` Express server on 127.0.0.1:3030 | always on |
 | `warning-watch-refresh.timer` | incremental pass (check archive → ingest new slot → snapshots/detection once per sample → retry delivery → feeds) | every 2 min, single active pass |
 | `warning-watch-sources.timer` | `run_watch.js` — collect due sources, preserve revisions, investigate queued changes, write handover | every minute, one leased pass |
-| `warning-watch-cbrn.timer` | `cbrn_refresh.js` — collect the CBRN instruments (gamma telemetry, sampled air traffic), run the four directional detectors and the fusion pass; writes alert events only, never deliveries | every 5 min, one flocked pass |
+| `warning-watch-cbrn.timer` | `cbrn_refresh.js` — collect the CBRN instruments (RadNet gamma telemetry, sampled air traffic), run the four directional detectors and the fusion pass; writes alert events only, never deliveries | every 5 min, one flocked pass |
+| `warning-watch-bfs.timer` | `ingest_cbrn_radiation.js --networks de,eurdep --budget-minutes 25` — read the two BfS gamma networks (German ODL, EURDEP) one page at a time, waiting out a starved database pool; the cadence gate allows one poll per network per 30 min | every 5 min, up to 25 min under the shared deploy lock |
 | `warning-watch-refresh-imports.timer` | same plus aircraft-metadata reimport | daily 00:29 |
 | `warning-watch-repair.timer` | `repair_history_gaps.js` — self-heals trailing gaps AND interior holes across all three cohorts, bounded to 30 days | every 6 h |
-| `warning-watch-watchdog.timer` | `ops_alert.js` — status verdict → ops ntfy topic (per-problem: pages after 3 min if present at half or more of the checks, 6 h re-page, daily `urgent` from 24 h, recovery note) | every 2 min |
+| `warning-watch-watchdog.timer` | `ops_alert.js` — status verdict → ops ntfy topic (per-problem: pages after 3 min if present at half or more of the checks, 6 h re-page, daily `urgent` from 24 h, recovery note; a third party's network unread pages once at onset and once on recovery) | every 2 min |
 | `warning-watch-backup.timer` | `backup_databases.js` — `VACUUM INTO data/backups/<day>/` for all five DBs (three aviation cohorts, `ews-watch.sqlite`, `ews-cbrn.sqlite`), integrity-checked, 14 days kept; staleness feeds the existing status verdict. Restore requires stopping all relevant writers first. Off-box: manual sha256-verified copies land at `xyra-sanctuary:/srv/sanctuary/backups/warning-watch/<day>/` (automation pending a box→sanctuary credential) | daily 02:10 |
 | `cloudflared.service` | Cloudflare tunnel (its label in the Cloudflare dashboard is still the pre-rename `apocalypse-ews` — cosmetic, the connector authenticates by id) — serves <https://warning.watch> from loopback:3030 and <https://ntfy.warning.watch> from loopback:2586 with no open inbound ports. Installed via `cloudflared service install <token>`; ingress config lives in the CF dashboard/API (`config_src: cloudflare`), not on disk | always on |
 | `ntfy.service` | self-hosted ntfy 2.27.0 (`/etc/ntfy/server.yml`): loopback:2586, `auth-default-access: read-only`, user `publisher` has rw on both topics, `upstream-base-url: ntfy.sh` for iOS instant delivery. Auth DB `/var/lib/ntfy/user.db`. Box-side publishers use `EWS_NTFY_SERVER=http://127.0.0.1:2586` (loopback survives a tunnel outage; subscribers reconnect and receive cached messages) | always on |
@@ -291,8 +307,9 @@ measurement and the alert. Alarm rules and every threshold are in
 [CBRN-WATCH.md](CBRN-WATCH.md); this section is the operational contract.
 
 `warning-watch-cbrn.timer` runs `scripts/cbrn_refresh.js` every five minutes.
-One pass: ingests gamma telemetry (self-limited to one poll per network per 30
-minutes), ingests the live aircraft sample, then runs the radiation, airspace,
+One pass: ingests RadNet gamma telemetry (self-limited to one poll an hour;
+the two BfS networks are read by `warning-watch-bfs.timer`, outside the pass
+and its deadline, as recorded below), ingests the live aircraft sample, then runs the radiation, airspace,
 notice and vocabulary detectors and the cross-family fusion pass. Stages are
 failure-isolated and each outcome is recorded in `data/cbrn-refresh-state.json`;
 a missing stage script is a hard failure, never a silent skip. The pass is
@@ -650,6 +667,52 @@ note; a return within a day of that clearing is the same problem and pages at
 the 19:56 UTC mark, or at once if it comes after it, and a return later than
 a day is a fresh problem that pages at three minutes at high. Nothing changed:
 the collector, its deadline and the schedule stay as recorded above.
+
+What changed on 22 Oct 2026, and why. The pool is not ours to fill. The box's
+BfS polls were held from 22:03 to 23:10 UTC while one-feature GetFeatures
+from a second vantage asked the pool, one every two to five minutes: of the
+twenty asked in that hour, two were served, in 53 and 38 s, fifteen were
+refused with the pool error in 20 to 54 s, and three went unanswered in 65,
+65 and 240 s, one served in ten with nothing of ours in the pool, where the
+days before had served one in six with the old reader's requests in it; BfS's
+own odlinfo map reads the same layer from the same endpoint and drew nothing.
+So the reader got patient and light, the watchdog stopped paging what nobody
+here can mend, and the public page took the gap. The two BfS networks moved
+to a unit of their own, `warning-watch-bfs.timer`, which runs
+`ingest_cbrn_radiation.js --networks de,eurdep --budget-minutes 25` every five
+minutes under the shared deploy lock, the cadence gate still allowing one poll
+per network per 30 minutes: one request in flight at a time, the network
+unread longest first, a page waited for up to 180 s rather than abandoned at
+60 s, and a page refused or unanswered asked again after 30, 60, 120 and then
+240 s for as long as the budget lasts, because a query the client abandons
+runs on in the database, and the reader until then, four pages at once per
+network, both networks at once, every request abandoned at 60 s, left the
+pool busier at every poll. EURDEP is read in one analysis window
+(`CQL_FILTER=analyzed_range_in_h=72`): the latest-value view lists a station
+once per window it has a value in, 6, 12, 24, 48 and 72 h with identical rows,
+and the 72 h window holds every station, 3,635 rows with the filter against
+17,618 without, measured at 22:31 and 22:55 UTC, the same 3,635 as stations on
+our roster with a reading in the last three days, so a poll is four pages,
+not eighteen. The cbrn pass reads RadNet alone inside its 120 s stage and can
+no longer be killed with a BfS page in flight. The run record names the
+endpoint, layer and filter that served a poll and a ledger of the read
+(`requests`, `refused`, `unanswered`, `waited_ms`, `elapsed_ms`), whether it
+succeeded or failed, and a failed poll's error names the ledger and the last
+cause; the status verdict watches the new timer and service; `deploy.sh`
+enables a timer new to the box and stops the BfS poll before an `npm ci`
+rather than waiting up to 25 minutes for its lock. The watchdog's schedule
+for a third party's network is in the re-entry protocol above: once at onset,
+once on recovery, never urgent. The status page, under the Radiation table,
+gives a network with no reading in four hours a line saying since when, that
+its operator's server has refused or not answered our last N reads and when
+the last whole read was, and that without readings it raises no alerts until
+it answers again; `/api/status` carries `lastRead` and `failedPolls` per
+network. Deployed at 22:30 UTC (reader and unit, `ed33dd1`) and 23:04 UTC
+(filter, schedule, page, `768f5ed`), both verified `healthy=true`. A notice to
+BfS, not sent, would carry: their odlinfo map reads the starved endpoint and
+draws nothing; a one-feature GetFeature is served in 12 to 65 s or refused
+with the pool error in 20 s; a starvation from 00:17 UTC on 15 Oct eased at
+10:18 UTC on 16 Oct and this one began at 08:05 UTC on 20 Oct.
 
 The aircraft feed is a collection too (`adsb.lol`), and a pass fails when any
 of its 16 regions has no sample. adsb.lol refuses requests late in a pass
