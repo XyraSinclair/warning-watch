@@ -619,6 +619,38 @@ resumes them; a whole read now sends a recovery note after ten minutes, the
 14:16 page being newer than the 11:02 note. Nothing changed: the collector,
 its deadline and the schedule stay as recorded above.
 
+The ninth page came at 19:56 UTC on 22 Oct, "Warning Watch unhealthy for
+1d 0h" at urgent, the day mark the record above named, the first urgent page
+of the starvation and the first the memory sent that the rule before it could
+not have: the 19:56 check fell exactly a day after the problem was first seen
+at 19:56:01 UTC on 21 Oct, and crossing the day is itself due. Neither network
+read once after 10:51 UTC. The German network failed the ten polls from 14:45
+to 19:45 UTC (14:45, 15:20, 15:55, 16:30, 17:00, 17:35, 18:05, 18:35, 19:10
+and 19:45 UTC), every one with the pool error at startIndex 0, sixteen in a
+row with the six the record above named. EURDEP failed ten too: seven with the
+pool error at startIndex 0, the 14:51 UTC poll with the pool error at
+startIndex 4000, and two cut at the stage deadline, the 18:11 UTC poll with
+the page at startIndex 5000 unanswered in 12 s and the 18:41 UTC poll with the
+page at startIndex 11000 unanswered in 44 s, the pool serving eleven pages
+that once and none at the two polls after. Both counts reached sixteen at
+19:45 UTC; the watchdog saw both problems present at all 170 checks since the
+14:16 page, 521 of 530 over the day, and 9 h 5 m had passed without a whole
+read on either. RadNet read all five hourly polls from 14:51 to 19:10 UTC, the
+aircraft feed every one of the 68 passes from 14:16 to 19:56 UTC, and no stage
+failed. From the box at 19:59 to 20:02 UTC, the ingest idle, GetCapabilities
+took 0.3 to 0.5 s and all seven one-feature GetFeatures were refused with the
+pool error in 20.2 to 20.3 s each, the pool handing out no connection at all,
+as at 02:04 and 14:18 UTC; odlinfo.bfs.de carried no notice. The site
+answered throughout; the off-box dead-man read it alive at all 169 probes from
+14:17 to 19:57 UTC and paged nothing. The starvation that began at 08:05 UTC
+on 20 Oct was then 60 hours old. The marks ahead are daily at urgent, the next
+at 19:56 UTC on 23 Oct, unless a whole read clears both, which now sends a
+recovery note after ten minutes, the 19:56 page being newer than the 11:02
+note; a return within a day of that clearing is the same problem and pages at
+the 19:56 UTC mark, or at once if it comes after it, and a return later than
+a day is a fresh problem that pages at three minutes at high. Nothing changed:
+the collector, its deadline and the schedule stay as recorded above.
+
 The aircraft feed is a collection too (`adsb.lol`), and a pass fails when any
 of its 16 regions has no sample. adsb.lol refuses requests late in a pass
 (HTTP 429): over 1,379 passes to 5 Oct 2026 none of the first three requests
