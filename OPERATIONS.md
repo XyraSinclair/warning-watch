@@ -104,6 +104,23 @@ on 20 Oct when EURDEP failed its sixth poll, its recovery note at 17:46 UTC, a
 page at 20:00 UTC on 21 Oct when the German network first failed its sixth,
 and the recovery note at 03:44 UTC on 22 Oct. The public status page carries
 the gap instead (see the CBRN watch section).
+The ADS-B Exchange archive is a third party's server too (since 23 Oct 2026):
+when the heatmap poller finds it unanswering (a read timed out, the connection
+refused or dropped, HTTP 429 or a 5xx) or empty (every slot in the lookback
+answered 404), it exits 75 (`EX_TEMPFAIL`) with an `archiveUnavailable` line,
+the pass records it as `lastPollError` in `data/refresh-state.json` beside the
+last whole read and runs its later stages, and the ingest stage is not failed.
+Ten minutes without a whole read while the passes run becomes `aircraft archive
+adsbexchange: unread for N m (bound 10m; <cause>)`, which pages like a gamma
+network: once at onset, default priority, once on recovery. The same ten minutes
+with the passes themselves stopped stays `availability polling stale`, the
+box's own. On 23 Oct 2026 four reads timed out in eight minutes (15:32 to
+15:38 UTC, the archive's 15 s), each failed the ingest stage, and the watchdog
+paged at high as a problem of the box's, the only page the refresh pipeline
+has ever sent; under this rule that outage is below the bound and pages
+nothing. Any other refusal (a 403 from a changed fronting, a 400) and any
+box-side crash in the stage (a locked database, a constraint) still fail the
+stage and page at the full schedule.
 The reason is the record: in the two weeks to 19 Sept 2026 the old
 hash-of-the-whole-set rule sent about 150 pages (a false pair every night while
 the backup was mid-write, bursts every two minutes from a minute counter in the
@@ -143,7 +160,7 @@ token).
 | `warning-watch-bfs.timer` | `ingest_cbrn_radiation.js --networks de,eurdep --budget-minutes 25` — read the two BfS gamma networks (German ODL, EURDEP) one page at a time, waiting out a starved database pool; the cadence gate allows one poll per network per 30 min | every 5 min, up to 25 min under the shared deploy lock |
 | `warning-watch-refresh-imports.timer` | same plus aircraft-metadata reimport | daily 00:29 |
 | `warning-watch-repair.timer` | `repair_history_gaps.js` — self-heals trailing gaps AND interior holes across all three cohorts, bounded to 30 days | every 6 h |
-| `warning-watch-watchdog.timer` | `ops_alert.js` — status verdict → ops ntfy topic (per-problem: pages after 3 min if present at half or more of the checks, 6 h re-page, daily `urgent` from 24 h, recovery note; a third party's network unread pages once at onset and once on recovery) | every 2 min |
+| `warning-watch-watchdog.timer` | `ops_alert.js` — status verdict → ops ntfy topic (per-problem: pages after 3 min if present at half or more of the checks, 6 h re-page, daily `urgent` from 24 h, recovery note; a third party's server unread — a gamma network, the adsb.lol feed, the ADS-B Exchange archive — pages once at onset and once on recovery) | every 2 min |
 | `warning-watch-backup.timer` | `backup_databases.js` — `VACUUM INTO data/backups/<day>/` for all five DBs (three aviation cohorts, `ews-watch.sqlite`, `ews-cbrn.sqlite`), integrity-checked, 14 days kept; staleness feeds the existing status verdict. Restore requires stopping all relevant writers first. Off-box: manual sha256-verified copies land at `xyra-sanctuary:/srv/sanctuary/backups/warning-watch/<day>/` (automation pending a box→sanctuary credential) | daily 02:10 |
 | `cloudflared.service` | Cloudflare tunnel (its label in the Cloudflare dashboard is still the pre-rename `apocalypse-ews` — cosmetic, the connector authenticates by id) — serves <https://warning.watch> from loopback:3030 and <https://ntfy.warning.watch> from loopback:2586 with no open inbound ports. Installed via `cloudflared service install <token>`; ingress config lives in the CF dashboard/API (`config_src: cloudflare`), not on disk | always on |
 | `ntfy.service` | self-hosted ntfy 2.27.0 (`/etc/ntfy/server.yml`): loopback:2586, `auth-default-access: read-only`, user `publisher` has rw on both topics, `upstream-base-url: ntfy.sh` for iOS instant delivery. Auth DB `/var/lib/ntfy/user.db`. Box-side publishers use `EWS_NTFY_SERVER=http://127.0.0.1:2586` (loopback survives a tunnel outage; subscribers reconnect and receive cached messages) | always on |
@@ -1238,7 +1255,11 @@ bounded release time; this is not a guaranteed two-minute warning system.
 Sequential alarm bounds remain measured in source samples, not poll attempts.
 The 75-minute source-age bound plus a healthy two-minute watchdog gives a
 nominal ≤77-minute stale-source detection bound, excluding notification delivery.
-Poll failures have a separate shorter bound in `status.js`.
+Poll failures have a separate shorter bound in `status.js`: ten minutes without a
+whole read of the archive, named as the archive's (`aircraft archive adsbexchange:
+unread`, paged once) when the passes run and the last found the archive unanswering
+or empty, and as the box's (`availability polling stale`) when the passes themselves
+have stopped.
 
 ### Live-source prerequisite
 
@@ -1523,6 +1544,7 @@ the upstream reference site.
 | heatmap downloads return 403 | ADSBx CDN rejects requests without a globe `Referer` (enforced ~2026-07/08) | all fetch sites send `scripts/adsbx_http.py` `GLOBE_HEADERS`; if 403 returns with those headers, the fronting changed again — re-probe with browser headers |
 | `import_global_cohort` JSON errors | upstream basic-ac-db ships occasional malformed JSONL lines | tolerated (skipped + counted) up to 0.5% of lines; above that the feed itself changed — inspect a fresh download |
 | refresh exits 1 with `failedStages` | one alert channel or feed export failed | other stages already ran; the failed channel's cursor holds and retries next pass — fix the named stage |
+| `lastPollError` in `refresh-state.json`, pass `ok:true`, verdict `aircraft archive adsbexchange: unread` | the ADS-B Exchange archive did not answer the poller (timeout, refused, 429, 5xx) or has published nothing in the lookback (all 404) | nothing on the box ends it; the next pass asks again and the problem clears at the first whole read — if it persists for hours, probe `globe.adsbexchange.com/globe_history/<date>/heatmap/<slot>.bin.ttf` with `GLOBE_HEADERS` from another vantage |
 | SQLITE_BUSY crashes | long writer + missing busy_timeout on a new DB open | every `new Database()` must be followed by `pragma('busy_timeout = 30000')` |
 | refresh exits 1 on `export_event_signals_feed` | snapshot vs DB timestamp skew > 35 min | genuine staleness — check ingestion; the 35-min slot tolerance is intentional (untracked cohort rounds `sampled_at`) |
 | refresh exits 1 on `ingest-snapshots-detection` with `UNIQUE constraint failed: live_snapshot.hex` | a heatmap parser read a callsign record as a second position for one hex | a position record has a lat field below 2^30 and a callsign record at or above it (see the heatmap note below); every parser of the format carries the same test, and a slice never holds two positions for one hex |

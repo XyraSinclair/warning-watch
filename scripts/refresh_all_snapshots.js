@@ -56,7 +56,7 @@ function run(command, commandArgs, options = {}) {
     throw result.error;
   }
 
-  if (result.status !== 0) {
+  if (result.status !== 0 && !(options.acceptStatus ?? []).includes(result.status)) {
     throw new Error(`${command} ${commandArgs.join(' ')} exited with status ${result.status}`);
   }
   if (options.capture) {
@@ -122,13 +122,25 @@ function ensureMilitaryCohort() {
   ]);
 }
 
+// update_latest_heatmap.py exits EX_TEMPFAIL when the archive did not answer or has
+// published nothing in its lookback window. The archive is a third party's, so that is
+// a poll failure, recorded beside the last whole read for status.js to name as the
+// archive's once the 10-minute poll bound is crossed, and not a failed stage of the
+// box's own; the next pass asks again.
+const EX_TEMPFAIL = 75;
+
 function refreshLiveData() {
   purgeDemoTrackedAircraft(MAIN_DB);
   purgeDemoTrackedAircraft(MILITARY_DB);
   purgeDemoTrackedAircraft(UNTRACKED_DB);
   const selected = run(PYTHON_BIN, [
     'scripts/update_latest_heatmap.py', '--db', MAIN_DB, '--additional-db', MILITARY_DB,
-  ], { capture: true });
+  ], { capture: true, acceptStatus: [EX_TEMPFAIL] });
+  if (selected.archiveUnavailable) {
+    state.lastPollError = selected.archiveUnavailable;
+    return false;
+  }
+  state.lastPollError = null;
   run(PYTHON_BIN, [
     'scripts/track_non_icao_hex.py',
     '--db',
@@ -140,6 +152,7 @@ function refreshLiveData() {
     path.join(DATA_DIR, 'cache', 'adsbx_live'),
     '--replace-live-snapshot',
   ]);
+  return true;
 }
 
 function exportSnapshots() {
@@ -354,21 +367,22 @@ saveState();
 try {
   ensureMainCohort();
   ensureMilitaryCohort();
-  refreshLiveData();
-  const samples = currentSamples();
-  if (samples.some((sample) => !sample)) throw new Error('A cohort has no live sample');
-  sampleKey = JSON.stringify(samples);
-  state.lastPollSuccessAt = new Date().toISOString();
-  state.observationChanged = sampleKey !== JSON.stringify(state.latestSampledAt);
-  state.latestSampledAt = samples;
-  if (state.observationChanged) state.lastNewObservationAt = new Date().toISOString();
-  saveState();
-  if (sampleKey !== state.processedSamples || refreshImports ||
-      ['dashboard.json', 'military-dashboard.json', 'untracked-dashboard.json']
-        .some((name) => !fs.existsSync(path.join(PUBLISHED_DIR, name)))) {
-    exportSnapshots();
-    detectAlertEvents();
-    state.processedSamples = sampleKey;
+  if (refreshLiveData()) {
+    const samples = currentSamples();
+    if (samples.some((sample) => !sample)) throw new Error('A cohort has no live sample');
+    sampleKey = JSON.stringify(samples);
+    state.lastPollSuccessAt = new Date().toISOString();
+    state.observationChanged = sampleKey !== JSON.stringify(state.latestSampledAt);
+    state.latestSampledAt = samples;
+    if (state.observationChanged) state.lastNewObservationAt = new Date().toISOString();
+    saveState();
+    if (sampleKey !== state.processedSamples || refreshImports ||
+        ['dashboard.json', 'military-dashboard.json', 'untracked-dashboard.json']
+          .some((name) => !fs.existsSync(path.join(PUBLISHED_DIR, name)))) {
+      exportSnapshots();
+      detectAlertEvents();
+      state.processedSamples = sampleKey;
+    }
   }
   saveState();
 } catch (error) {

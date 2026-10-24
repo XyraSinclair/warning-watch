@@ -27,8 +27,9 @@
 //   hours as five fresh problems, each "for 4m", with four recovery notes
 //   between and never reaching urgent; with the memory it is one problem that
 //   pages on the 6 h marks, goes urgent at a day, and then pages daily.
-// - A problem that names a third party's network ("cbrn network <source>: N
-//   consecutive collection failures") is theirs to end, not ours: it pages
+// - A problem that names a third party's server ("cbrn network <source>: N
+//   consecutive collection failures"; "aircraft archive adsbexchange: unread
+//   for N m", since 23 Oct 2026) is theirs to end, not ours: it pages
 //   once at onset, at default priority, and once more when it clears, never
 //   on the marks and never urgent. From 20 to 22 Oct 2026 the BfS pool
 //   starvation paged nine times in 56 hours, the last urgent as it crossed a
@@ -62,9 +63,11 @@ function problemKey(text) {
   return String(text).replace(/ \(.*$/s, '').replace(/\d+(\.\d+)?/g, '#');
 }
 
-// The problems that name a third party's network (status.js, "cbrn network").
-const UPSTREAM_PREFIX = 'cbrn network ';
-const upstream = (record) => problemKey(record.text).startsWith(UPSTREAM_PREFIX);
+// The problems that name a third party's server (status.js: "cbrn network" for
+// the gamma networks and the adsb.lol feed, "aircraft archive" for the ADS-B
+// Exchange archive).
+const UPSTREAM_PREFIXES = ['cbrn network ', 'aircraft archive '];
+const upstream = (record) => UPSTREAM_PREFIXES.some((prefix) => problemKey(record.text).startsWith(prefix));
 
 function formatAge(ms) {
   if (ms >= DAY_MS) return `${Math.floor(ms / DAY_MS)}d ${Math.floor((ms % DAY_MS) / HOUR_MS)}h`;

@@ -2,7 +2,9 @@
 
 import argparse
 import datetime as dt
+import http.client
 import json
+import os
 import pathlib
 import sqlite3
 import sys
@@ -123,23 +125,39 @@ def heatmap_url_for(timestamp):
     )
 
 
+class ArchiveUnavailable(Exception):
+    """The archive did not answer a read, or has published nothing in the lookback window.
+
+    The archive is a third party's: nothing on the box ends this and the next pass asks
+    again, so the pipeline records it as a poll failure (EX_TEMPFAIL; lastPollError in
+    refresh-state.json) and not as a failed stage of the box's own. On 23 Oct 2026 four
+    reads timed out in eight minutes, each failed the ingest stage, and that paged at high.
+    """
+
+
 def download_heatmap(timestamp, destination, timeout_seconds=15):
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists():
         return True, True
 
-    request = urllib.request.Request(heatmap_url_for(timestamp), headers=GLOBE_HEADERS)
+    url = heatmap_url_for(timestamp)
+    request = urllib.request.Request(url, headers=GLOBE_HEADERS)
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             payload = response.read()
-        temporary = destination.with_suffix(destination.suffix + ".part")
-        temporary.write_bytes(payload)
-        temporary.replace(destination)
-        return True, False
     except urllib.error.HTTPError as error:
         if error.code == 404:
             return False, False
+        # The server's own failures are the archive's; any other refusal means our request is wrong.
+        if error.code == 429 or error.code >= 500:
+            raise ArchiveUnavailable(f"HTTP {error.code} from {url}") from error
         raise
+    except (urllib.error.URLError, TimeoutError, http.client.HTTPException, ConnectionError) as error:
+        raise ArchiveUnavailable(f"{error} ({url})") from error
+    temporary = destination.with_suffix(destination.suffix + ".part")
+    temporary.write_bytes(payload)
+    temporary.replace(destination)
+    return True, False
 
 
 def choose_latest_heatmap(now, lookback_slots):
@@ -164,7 +182,9 @@ def choose_latest_heatmap(now, lookback_slots):
             "used_cache": used_cache,
         }
 
-    raise FileNotFoundError("No recent ADS-B Exchange heatmap file was available in the requested lookback window.")
+    raise ArchiveUnavailable(
+        f"nothing published for the {lookback_slots + 1} slots to {slot_key_for(latest_slot)}, every read answered 404"
+    )
 
 
 @lru_cache(maxsize=1)
@@ -678,6 +698,9 @@ if __name__ == "__main__":
         for db_path in args.additional_db:
             args.db = db_path
             main(args, selected)
+    except ArchiveUnavailable as error:
+        print(json.dumps({"ok": False, "archiveUnavailable": str(error)}))
+        sys.exit(os.EX_TEMPFAIL)
     except Exception as error:  # pragma: no cover - CLI error path
         print(str(error), file=sys.stderr)
         raise

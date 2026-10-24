@@ -341,7 +341,15 @@ if (!report.polling) {
 } else {
   if (report.polling.lastError) problems.push(`refresh pipeline: ${report.polling.lastError}`);
   if (!Number.isFinite(report.polling.pollAgeMinutes) || report.polling.pollAgeMinutes > 10) {
-    problems.push(`availability polling stale (${report.polling.pollAgeMinutes}m > 10m bound)`);
+    // Ten minutes without a whole read of the archive. While the passes run and the last
+    // found the archive unanswering or empty (lastPollError), the gap is the archive's, a
+    // third party's the watchdog pages once at onset; otherwise it is the box's own.
+    const attemptAgeMinutes = report.polling.lastAttemptAt ? (Date.now() - Date.parse(report.polling.lastAttemptAt)) / 60000 : Infinity;
+    if (report.polling.lastPollError && attemptAgeMinutes <= 10) {
+      problems.push(`aircraft archive adsbexchange: unread for ${report.polling.pollAgeMinutes}m (bound 10m; ${report.polling.lastPollError})`);
+    } else {
+      problems.push(`availability polling stale (${report.polling.pollAgeMinutes}m > 10m bound)`);
+    }
   }
 }
 for (const cohort of report.cohorts) {
