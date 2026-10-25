@@ -2,7 +2,7 @@
 Description=Run Warning Watch history repair every 6 hours
 
 [Timer]
-OnCalendar=*-*-* 00,06,12,18:50:00
+OnCalendar=*-*-* 00,06,12,18:50:00 UTC
 Persistent=true
 Unit=warning-watch-repair.service
 

@@ -2,7 +2,7 @@
 Description=Daily Warning Watch SQLite backups
 
 [Timer]
-OnCalendar=*-*-* 02:10:00
+OnCalendar=*-*-* 02:10:00 UTC
 Persistent=true
 
 [Install]

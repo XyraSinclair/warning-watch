@@ -2,7 +2,7 @@
 Description=Run Warning Watch metadata refresh daily
 
 [Timer]
-OnCalendar=*-*-* 00:29:00
+OnCalendar=*-*-* 00:29:00 UTC
 Persistent=true
 Unit=warning-watch-refresh-imports.service
 

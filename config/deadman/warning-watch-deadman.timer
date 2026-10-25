@@ -2,7 +2,7 @@
 Description=Run the warning.watch off-box dead-man every two minutes
 
 [Timer]
-OnCalendar=*-*-* *:01/2:00
+OnCalendar=*-*-* *:01/2:00 UTC
 AccuracySec=10s
 Persistent=true
 Unit=warning-watch-deadman.service

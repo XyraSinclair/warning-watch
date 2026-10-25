@@ -62,7 +62,20 @@ holds, and sends one recovery note. The topic URL lives only in
 `~/.config/warning-watch/deadman.env` on that machine, never in this repo; the
 script and units are copied to `~/.local/lib/warning-watch-deadman/` and
 `~/.config/systemd/user/`. Proven 20 Sept 2026: two probes of a dead URL paged
-inside a minute, the next live probe sent the recovery note.
+inside a minute, the next live probe sent the recovery note. Its one true
+stall page so far was 01:11 UTC on 25 Oct 2026, the hour of the autumn
+fall-back: the box's clock is Europe/Berlin, every timer's `OnCalendar` was
+written in local time, and from 02:58 CEST systemd resolved the next `03:00`
+to 03:00 CET, an hour on, so no warning-watch unit started between 00:58 and
+02:00 UTC (on the box, `systemd-analyze calendar '*-*-* *:00/5:00'
+--base-time='2026-10-25 00:58:00 UTC'` gives 02:00 UTC; the same spec ending
+in ` UTC` gives 01:00 UTC). The passes resumed at 02:00 UTC, the recovery
+note went at 02:03 UTC, the box's watchdog saw the stale passes at one check
+and paged nothing under its three-minute hold, and the 01:00 UTC aircraft
+sample is a hole adsb.lol cannot refill. Since then every timer in
+`config/systemd/` and `config/deadman/` ends its spec in ` UTC`, so no clock
+zone schedules anything and the daily units run at the UTC times the table
+below gives, which until then were Berlin wall-clock times.
 
 A page must mean something, so the schedule is per problem (`decide` in
 `ops_alert.js`, pure, runnable on a fake clock). A problem is identified by its
@@ -149,7 +162,10 @@ Systemd units — canonical sources in `config/systemd/` (incl.
 **Fresh-box rebuild: `deploy/bootstrap.sh`** (run as root on Ubuntu 24.04;
 idempotent; installs packages/units from the canonical sources and prints
 TODOs for the two secrets it cannot invent — the env file and the tunnel
-token).
+token). Every timer's `OnCalendar` ends in ` UTC`, so the cadences below are
+UTC whatever zone the box's clock keeps (it keeps Europe/Berlin, and a
+local-time spec skipped the hour of 25 Oct 2026 that the autumn fall-back
+repeated; see the re-entry protocol).
 
 | Unit | What | Cadence |
 |---|---|---|
@@ -1545,6 +1561,7 @@ the upstream reference site.
 | `import_global_cohort` JSON errors | upstream basic-ac-db ships occasional malformed JSONL lines | tolerated (skipped + counted) up to 0.5% of lines; above that the feed itself changed — inspect a fresh download |
 | refresh exits 1 with `failedStages` | one alert channel or feed export failed | other stages already ran; the failed channel's cursor holds and retries next pass — fix the named stage |
 | `lastPollError` in `refresh-state.json`, pass `ok:true`, verdict `aircraft archive adsbexchange: unread` | the ADS-B Exchange archive did not answer the poller (timeout, refused, 429, 5xx) or has published nothing in the lookback (all 404) | nothing on the box ends it; the next pass asks again and the problem clears at the first whole read — if it persists for hours, probe `globe.adsbexchange.com/globe_history/<date>/heatmap/<slot>.bin.ttf` with `GLOBE_HEADERS` from another vantage |
+| every warning-watch timer silent for the hour after 01:00 UTC on the last Sunday of October; the off-box dead-man pages `stalled`, the box pages nothing | the box's clock is Europe/Berlin and a local-time `OnCalendar` skips the hour the autumn fall-back repeats (25 Oct 2026) | every timer spec ends in ` UTC`; after a deploy `systemctl show -p TimersCalendar 'warning-watch-*.timer'` must show it on each, and a new timer is tried with `systemd-analyze calendar <spec> --base-time=<the next transition>` before it lands |
 | SQLITE_BUSY crashes | long writer + missing busy_timeout on a new DB open | every `new Database()` must be followed by `pragma('busy_timeout = 30000')` |
 | refresh exits 1 on `export_event_signals_feed` | snapshot vs DB timestamp skew > 35 min | genuine staleness — check ingestion; the 35-min slot tolerance is intentional (untracked cohort rounds `sampled_at`) |
 | refresh exits 1 on `ingest-snapshots-detection` with `UNIQUE constraint failed: live_snapshot.hex` | a heatmap parser read a callsign record as a second position for one hex | a position record has a lat field below 2^30 and a callsign record at or above it (see the heatmap note below); every parser of the format carries the same test, and a slice never holds two positions for one hex |

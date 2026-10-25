@@ -2,7 +2,7 @@
 Description=Collect CBRN instruments and run the CBRN detectors every five minutes
 
 [Timer]
-OnCalendar=*-*-* *:00/5:00
+OnCalendar=*-*-* *:00/5:00 UTC
 AccuracySec=1s
 Persistent=true
 Unit=warning-watch-cbrn.service
