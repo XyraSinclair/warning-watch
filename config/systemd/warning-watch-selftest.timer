@@ -2,7 +2,7 @@
 Description=Run the Warning Watch detector self-test nightly
 
 [Timer]
-OnCalendar=*-*-* 03:40:00 UTC
+OnCalendar=*-*-* 01:40:00 UTC
 Persistent=true
 Unit=warning-watch-selftest.service
 

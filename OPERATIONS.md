@@ -75,7 +75,19 @@ and paged nothing under its three-minute hold, and the 01:00 UTC aircraft
 sample is a hole adsb.lol cannot refill. Since then every timer in
 `config/systemd/` and `config/deadman/` ends its spec in ` UTC`, so no clock
 zone schedules anything and the daily units run at the UTC times the table
-below gives, which until then were Berlin wall-clock times.
+below gives, which until then were Berlin wall-clock times. Two things to
+know before the next calendar change. A timer with `Persistent=true` whose
+spec moves counts a slot the new spec already passed as missed, so the reload
+of 07:22 UTC on 25 Oct started the repair, backup, selftest, canary and
+imports units at once (all ended well but the selftest; the canary published
+its weekly ops note six days early). And the selftest keeps 01:40 UTC, the
+hour it ran at all summer: its injected exodus triples the last four slots of
+history, and at the quiet 05:30 to 07:00 UTC slots of a Sunday a tripled
+business-jet count is 4 to 8 sigma against the 11.2 sigma alarm, so that
+reload-time run failed both injection bounds and flagged the verdict for two
+checks until its failed state was reset, where the same run on the 00:30 to
+02:30 UTC slots is 14 to 15 sigma. The bound holds at the hour it is run at;
+it is not a bound on the hour.
 
 A page must mean something, so the schedule is per problem (`decide` in
 `ops_alert.js`, pure, runnable on a fake clock). A problem is identified by its
@@ -1254,7 +1266,7 @@ loudly.
 | Live-ingestion age | ≤ 75 min | same cadence; distinct from row age because repair heals rows without the live instrument running | `status.js` → watchdog |
 | Live slots, trailing 24 h | ≥ 42/48 | live path should hit every slot; 6 misses/day means it is skipping | `status.js` → watchdog |
 | Slot completeness, 30 d | ≥ 98 % | every expected slot is live, backfilled, or accounted missing | `status.js` → watchdog |
-| 3× exodus → HIGH | ≤ 60 min | the reason the system exists; replayed nightly by injection | `backtest --assert` (selftest timer, 03:40 UTC) |
+| 3× exodus → HIGH | ≤ 60 min | the reason the system exists; replayed nightly by injection | `backtest --assert` (selftest timer, 01:40 UTC) |
 | 3× exodus → CRITICAL | ≤ 120 min | one 3× slot reads ~9–10σ while the self-calibrated alarm line sits at ~11σ (2nd-hottest real day — Dec 27 holiday wave hit 11.1σ with no apocalypse); sustain is what separates an exodus from a holiday wave, and CUSUM accumulates it past critical inside two hours (recalibrated 2026-08-30 on the full 365-day history) | `backtest --assert` |
 | Takeoff false criticals | 0 in replay | critical is a paging severity; history contains no exodus | `backtest --assert` |
 | Takeoff public alerts | ≤ 12/yr (+2 slack per replay) | the stated alert budget; counted at elevated and above, the tiers a subscriber receives | `backtest --assert` |
