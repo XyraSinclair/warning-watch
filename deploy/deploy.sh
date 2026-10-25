@@ -32,6 +32,13 @@ fi
 
 as_xyra npm run build --silent
 
+# The box's clock is Europe/Berlin and a local-time calendar skipped the hour
+# the 25 Oct 2026 fall-back repeated; every timer schedules in UTC.
+for f in config/systemd/*.timer config/deadman/*.timer; do
+  grep -q '^OnCalendar=.* UTC$' "$f" \
+    || { echo "units: $f schedules in local time; every OnCalendar ends in UTC (OPERATIONS.md, re-entry protocol)" >&2; exit 1; }
+done
+
 drift=0
 for f in config/systemd/*.service config/systemd/*.timer; do
   cmp -s "$f" "/etc/systemd/system/$(basename "$f")" || drift=1
