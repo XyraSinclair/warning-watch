@@ -336,6 +336,7 @@ const MIN_LIVE_SLOTS_24H = 42; // 48 expected; tolerate 6 missed live slots/day
 const MIN_COMPLETENESS_PCT_30D = 98;
 
 const problems = [];
+let archiveUnread = false;
 if (!report.polling) {
   problems.push('poll status missing — check warning-watch-refresh.service');
 } else {
@@ -346,6 +347,7 @@ if (!report.polling) {
     // third party's the watchdog pages once at onset; otherwise it is the box's own.
     const attemptAgeMinutes = report.polling.lastAttemptAt ? (Date.now() - Date.parse(report.polling.lastAttemptAt)) / 60000 : Infinity;
     if (report.polling.lastPollError && attemptAgeMinutes <= 10) {
+      archiveUnread = true;
       problems.push(`aircraft archive adsbexchange: unread for ${report.polling.pollAgeMinutes}m (bound 10m; ${report.polling.lastPollError})`);
     } else {
       problems.push(`availability polling stale (${report.polling.pollAgeMinutes}m > 10m bound)`);
@@ -354,6 +356,11 @@ if (!report.polling) {
 }
 for (const cohort of report.cohorts) {
   if (cohort.missing) { problems.push(`${cohort.label}: database missing`); continue; }
+  // While the archive is unread no cohort can gain a row or a live slot: the four bounds
+  // below are that one gap's consequences and the archive line is the problem, paged once
+  // as a third party's; they are judged again at the first whole read. Until 28 Oct 2026
+  // they named the box at 75 minutes, at high and every six hours after.
+  if (archiveUnread) continue;
   if (cohort.staleHours === null || cohort.staleHours > MAX_DATA_AGE_HOURS) {
     problems.push(`${cohort.label}: history stale (${cohort.staleHours}h > ${MAX_DATA_AGE_HOURS}h bound) — run npm run repair:gaps`);
   }

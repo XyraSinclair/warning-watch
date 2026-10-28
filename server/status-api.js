@@ -182,6 +182,24 @@ function readCohorts() {
   });
 }
 
+// The ADS-B Exchange archive the cohorts are sampled from, as the refresh pass last
+// left it: the newest whole read, and the archive's answer when the last read failed.
+// The page says why the cohort rows stop when it is the archive that stopped them.
+function readArchive() {
+  const empty = { lastReadAt: null, ageMinutes: null, lastAttemptAt: null, error: null };
+  try {
+    const state = JSON.parse(fs.readFileSync(path.join(DATA_DIR, "refresh-state.json"), "utf8"));
+    return {
+      lastReadAt: state.lastPollSuccessAt ?? null,
+      ageMinutes: minutesSince(state.lastPollSuccessAt),
+      lastAttemptAt: state.lastAttemptAt ?? null,
+      error: state.lastPollError ?? null,
+    };
+  } catch {
+    return empty;
+  }
+}
+
 function getStatusSummary(mainDbPath) {
   const mainPath = mainDbPath || resolveDb("EWS_DB_PATH") || path.join(DATA_DIR, "ews-main.sqlite");
   const cbrnPath = resolveDb("EWS_CBRN_DB_PATH") || path.join(DATA_DIR, "ews-cbrn.sqlite");
@@ -197,6 +215,7 @@ function getStatusSummary(mainDbPath) {
       aircraft: readCbrnAircraft(cbrn),
       aviation: readAviation(main),
       cohorts: readCohorts(),
+      archive: readArchive(),
       sources: readSources(watch),
     };
   } finally {

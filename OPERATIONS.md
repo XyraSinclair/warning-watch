@@ -146,6 +146,26 @@ has ever sent; under this rule that outage is below the bound and pages
 nothing. Any other refusal (a 403 from a changed fronting, a 400) and any
 box-side crash in the stage (a locked database, a constraint) still fail the
 stage and page at the full schedule.
+Since 14:08 UTC on 28 Oct 2026 the archive answers every scripted read HTTP 403
+with one sentence, `Historical data requires a verified session.` (without the
+globe Referer, `Direct access to globe history data is not permitted.`), from
+the box and from a second vantage alike and with full browser headers, while the
+globe page itself answers 200 and its scripts take the session from reCAPTCHA
+Enterprise; the last whole read was at 14:06 UTC, every pass from 14:08 UTC
+failed the ingest stage until this rule was deployed, and the watchdog paged at
+high at 14:14 UTC as a problem of the box's.
+That one 403, the refusal that names its reason, is the archive's gate and
+nothing on the box opens it: the poller classes it with the timeouts, carrying
+the sentence as the cause, and the backfill does not retry it; any other 403
+still means our request is wrong. While the archive is unread the four cohort
+bounds (row age, live-ingestion age, live slots, slot completeness) are that one
+gap's consequences and are not raised beside it; they are judged again at the
+first whole read, and a live-slot count under 42 of 48 may then name the box for
+up to a day after an outage over three hours. The public page says under the
+aircraft table, once no whole read is 75 minutes old, that the cohorts have no
+sample and why. Reading the archive again is a decision of Xyra's: ADS-B
+Exchange sells a key (§ Live-source prerequisite), and no session is taken
+another way.
 The reason is the record: in the two weeks to 19 Sept 2026 the old
 hash-of-the-whole-set rule sent about 150 pages (a false pair every night while
 the backup was mid-write, bursts every two minutes from a minute counter in the
@@ -1285,9 +1305,10 @@ The 75-minute source-age bound plus a healthy two-minute watchdog gives a
 nominal ≤77-minute stale-source detection bound, excluding notification delivery.
 Poll failures have a separate shorter bound in `status.js`: ten minutes without a
 whole read of the archive, named as the archive's (`aircraft archive adsbexchange:
-unread`, paged once) when the passes run and the last found the archive unanswering
-or empty, and as the box's (`availability polling stale`) when the passes themselves
-have stopped.
+unread`, paged once) when the passes run and the last found the archive unanswering,
+empty or closed to scripted readers, and as the box's (`availability polling stale`)
+when the passes themselves have stopped. While the archive is unread the four cohort
+bounds above are its consequences and are not raised beside that line (28 Oct 2026).
 
 ### Live-source prerequisite
 
@@ -1569,10 +1590,10 @@ the upstream reference site.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `npm run status` → history stale | box outage or upstream feed break | `systemctl start warning-watch-repair.service` (or wait ≤6 h for the timer); if refresh itself is failing, `journalctl -u warning-watch-refresh` |
-| heatmap downloads return 403 | ADSBx CDN rejects requests without a globe `Referer` (enforced ~2026-07/08) | all fetch sites send `scripts/adsbx_http.py` `GLOBE_HEADERS`; if 403 returns with those headers, the fronting changed again — re-probe with browser headers |
+| heatmap downloads return 403 | without the globe `Referer`, the CDN's `Direct access to globe history data is not permitted` (enforced ~2026-07/08); with it, since 28 Oct 2026, `Historical data requires a verified session`, the archive's gate on every scripted reader | all fetch sites send `scripts/adsbx_http.py` `GLOBE_HEADERS`; the verified-session 403 is recorded as `lastPollError` and the verdict names the archive (row below), and only a key or a feed of Xyra's choosing ends it; any other 403 with those headers means the fronting changed again — re-probe with browser headers |
 | `import_global_cohort` JSON errors | upstream basic-ac-db ships occasional malformed JSONL lines | tolerated (skipped + counted) up to 0.5% of lines; above that the feed itself changed — inspect a fresh download |
 | refresh exits 1 with `failedStages` | one alert channel or feed export failed | other stages already ran; the failed channel's cursor holds and retries next pass — fix the named stage |
-| `lastPollError` in `refresh-state.json`, pass `ok:true`, verdict `aircraft archive adsbexchange: unread` | the ADS-B Exchange archive did not answer the poller (timeout, refused, 429, 5xx) or has published nothing in the lookback (all 404) | nothing on the box ends it; the next pass asks again and the problem clears at the first whole read — if it persists for hours, probe `globe.adsbexchange.com/globe_history/<date>/heatmap/<slot>.bin.ttf` with `GLOBE_HEADERS` from another vantage |
+| `lastPollError` in `refresh-state.json`, pass `ok:true`, verdict `aircraft archive adsbexchange: unread` | the ADS-B Exchange archive did not answer the poller (timeout, refused, 429, 5xx), has published nothing in the lookback (all 404), or refuses every scripted read (403 `Historical data requires a verified session`, since 28 Oct 2026) | nothing on the box ends it; the next pass asks again and the problem clears at the first whole read, the cohort bounds held back until then — if it persists for hours, probe `globe.adsbexchange.com/globe_history/<date>/heatmap/<slot>.bin.ttf` with `GLOBE_HEADERS` from another vantage; the verified-session 403 persists until a key or another feed is chosen |
 | every warning-watch timer silent for the hour after 01:00 UTC on the last Sunday of October; the off-box dead-man pages `stalled`, the box pages nothing | the box's clock is Europe/Berlin and a local-time `OnCalendar` skips the hour the autumn fall-back repeats (25 Oct 2026) | every timer spec ends in ` UTC` and `deploy/deploy.sh` refuses one that does not; a new timer is tried with `systemd-analyze calendar <spec> --base-time=<the next transition>` before it lands |
 | SQLITE_BUSY crashes | long writer + missing busy_timeout on a new DB open | every `new Database()` must be followed by `pragma('busy_timeout = 30000')` |
 | refresh exits 1 on `export_event_signals_feed` | snapshot vs DB timestamp skew > 35 min | genuine staleness — check ingestion; the 35-min slot tolerance is intentional (untracked cohort rounds `sampled_at`) |

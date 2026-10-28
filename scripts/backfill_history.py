@@ -168,9 +168,11 @@ def download_heatmap(date_value, index, destination, rate_limit_seconds, timeout
         except urllib.error.HTTPError as error:
             if error.code == 404:
                 return False
-            if attempt == max_retries:
+            # A 403 is the archive's refusal (since 28 Oct 2026 of every scripted read:
+            # "Historical data requires a verified session"); a retry asks the same closed door.
+            if attempt == max_retries or error.code == 403:
                 print(
-                    f"Skipping {heatmap_url_for(date_value, index)} after {max_retries} HTTP failures: {error}",
+                    f"Skipping {heatmap_url_for(date_value, index)} after {attempt} HTTP failures: {error}",
                     file=sys.stderr,
                 )
                 return None

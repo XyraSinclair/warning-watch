@@ -148,9 +148,17 @@ def download_heatmap(timestamp, destination, timeout_seconds=15):
     except urllib.error.HTTPError as error:
         if error.code == 404:
             return False, False
-        # The server's own failures are the archive's; any other refusal means our request is wrong.
+        # The server's own failures are the archive's, and so is the one refusal that names
+        # its reason: since 14:08 UTC on 28 Oct 2026 the archive answers every scripted read,
+        # from any vantage and with the globe headers, 403 "Historical data requires a
+        # verified session", a gate the globe page's own scripts open through reCAPTCHA and
+        # nothing on the box does. Any other refusal means our request is wrong.
         if error.code == 429 or error.code >= 500:
             raise ArchiveUnavailable(f"HTTP {error.code} from {url}") from error
+        if error.code == 403:
+            reason = error.read(300).decode("utf-8", "replace").strip()
+            if "verified session" in reason:
+                raise ArchiveUnavailable(f"{reason} (HTTP 403, {url})") from error
         raise
     except (urllib.error.URLError, TimeoutError, http.client.HTTPException, ConnectionError) as error:
         raise ArchiveUnavailable(f"{error} ({url})") from error

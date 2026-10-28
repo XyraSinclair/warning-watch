@@ -24,6 +24,7 @@ type Status = {
     departures: { records: number; days: number; newest: string | null; ageMinutes: number | null };
   };
   cohorts: Cohort[];
+  archive: { lastReadAt: string | null; ageMinutes: number | null; lastAttemptAt: string | null; error: string | null };
   sources: { id: string; lastSuccessAt: string | null; health: 'live' | 'stale' | 'never' }[];
   channels: Channels;
 };
@@ -68,6 +69,16 @@ function unreadNote(network: Network): string {
   return (
     `${NETWORK_NAMES[network.source] ?? network.source}: no reading since ${utc(network.newestReading)}; ${cause}. ` +
     'Without readings this network raises no alerts until it answers again.'
+  );
+}
+// The aircraft cohorts are sampled from the ADS-B Exchange archive every half hour. With
+// no whole read in 75 minutes (the data-age bound) they are not watching, and the page
+// says so and why: the archive's last answer, as the poller recorded it.
+function archiveNote(archive: Status['archive']): string {
+  return (
+    `Aircraft: no sample since ${utc(archive.lastReadAt)}; the ADS-B Exchange archive has refused or not answered ` +
+    `our reads since then, the last ${ago(archive.lastAttemptAt)}: ${archive.error}. ` +
+    'Without samples the aircraft cohorts raise no alerts until it answers again.'
   );
 }
 const SOURCE = 'https://github.com/XyraSinclair/warning-watch/blob/main';
@@ -223,6 +234,9 @@ export default function DetectorPage() {
             </tr>
           </tbody>
         </table>
+        {status?.archive?.error && status.archive.ageMinutes != null && status.archive.ageMinutes > 75 && (
+          <p className="fine">{archiveNote(status.archive)}</p>
+        )}
         <p className="fine">
           Positions come from ADS-B Exchange, which does not honour requests to hide an aircraft. We publish counts and
           alerts, never one aircraft's movements.
