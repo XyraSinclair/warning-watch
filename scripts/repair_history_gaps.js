@@ -15,7 +15,9 @@
 // Contiguous candidate days are repaired as single ranges via the cohort's
 // backfill tool. The heatmap cache is shared across cohorts, so ranges are
 // downloaded once (--keep-cache) and cleaned up after a successful pass.
-// Idempotent; safe on a schedule. Skips when another repair holds the lock.
+// Idempotent; safe on a schedule. Skips when another repair holds the lock, and
+// when the archive is unread (the backfill's EX_TEMPFAIL): a repair deletes only
+// what it has read again, so a closed archive leaves every row as it was.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -34,6 +36,7 @@ const MAX_DAY_ATTEMPTS = 2; // per-day retry budget for interior repairs
 const ATTEMPTS_META_KEY = 'repair_day_attempts';
 const VENV_PYTHON = path.join(ROOT_DIR, '.venv', 'bin', 'python');
 const PYTHON_BIN = process.env.EWS_PYTHON || (fs.existsSync(VENV_PYTHON) ? VENV_PYTHON : 'python3');
+const EX_TEMPFAIL = 75; // the backfill's exit when the archive did not answer: skipped, not failed
 
 const DATABASES = [
   {
@@ -148,6 +151,7 @@ function recordAttempts(dbPath, attempts, days) {
   } finally {
     db.close();
   }
+  return next;
 }
 
 function runBackfill(entry, startDate, endDate) {
@@ -155,7 +159,7 @@ function runBackfill(entry, startDate, endDate) {
     cwd: ROOT_DIR,
     stdio: ['ignore', 'inherit', 'inherit'],
   });
-  return result.status === 0;
+  return result.status;
 }
 
 function holeyDayRanges(history, nowMs, excludeFromDay) {
@@ -227,16 +231,36 @@ function repairDatabase(entry, { dryRun }) {
     return { db: dbPath, wouldRepair: actions };
   }
 
-  const attemptedDays = actions.flatMap((action) => action.days);
-  if (attemptedDays.length > 0) {
-    recordAttempts(dbPath, history.attempts, attemptedDays);
+  // A backfill that exits EX_TEMPFAIL found the archive unread (closed, rate-limited,
+  // unanswering): it deleted and wrote nothing, so the remaining actions and databases
+  // are skipped this run (the box asks once, not 48 times: on 28 Oct 2026 the burst of
+  // refused reads got its address rate-limited on top of the gate), no day's attempt
+  // is spent, and the run is not a failure; the next run asks again.
+  const results = [];
+  let archiveUnread = false;
+  for (const action of actions) {
+    if (archiveUnread) {
+      results.push({ ...action, skipped: 'archive unread' });
+      continue;
+    }
+    const status = runBackfill(entry, action.startDate, action.endDate);
+    if (status === EX_TEMPFAIL) {
+      archiveUnread = true;
+      results.push({ ...action, skipped: 'archive unread' });
+      continue;
+    }
+    if (action.days.length > 0) {
+      history.attempts = recordAttempts(dbPath, history.attempts, action.days);
+    }
+    results.push({ ...action, repaired: status === 0 });
   }
-
-  const results = actions.map((action) => ({
-    ...action,
-    repaired: runBackfill(entry, action.startDate, action.endDate),
-  }));
-  return { db: dbPath, repaired: results.every((r) => r.repaired), actions: results };
+  const ran = results.filter((result) => result.skipped === undefined);
+  return {
+    db: dbPath,
+    ...(ran.length > 0 ? { repaired: ran.every((result) => result.repaired) } : {}),
+    ...(archiveUnread ? { archiveUnread: true } : {}),
+    actions: results,
+  };
 }
 
 function cleanCache() {
@@ -256,12 +280,22 @@ function main() {
     console.log(JSON.stringify({ ok: true, skipped: true, reason: 'repair lock held' }));
     return;
   }
-  const results = DATABASES.map((entry) => repairDatabase(entry, { dryRun }));
+  const results = [];
+  let archiveUnread = false;
+  for (const entry of DATABASES) {
+    if (archiveUnread) {
+      results.push({ db: entry.dbPath, skipped: true, reason: 'archive unread' });
+      continue;
+    }
+    const result = repairDatabase(entry, { dryRun });
+    if (result.archiveUnread) archiveUnread = true;
+    results.push(result);
+  }
   if (!dryRun && results.some((entry) => entry.actions)) {
     cleanCache();
   }
   const ok = results.every((entry) => entry.repaired !== false);
-  console.log(JSON.stringify({ ok, dryRun, results }));
+  console.log(JSON.stringify({ ok, dryRun, archiveUnread, results }));
   if (!ok) {
     process.exit(1);
   }

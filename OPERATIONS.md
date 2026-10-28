@@ -166,6 +166,41 @@ aircraft table, once no whole read is 75 minutes old, that the cohorts have no
 sample and why. Reading the archive again is a decision of Xyra's: ADS-B
 Exchange sells a key (§ Live-source prerequisite), and no session is taken
 another way.
+The self-healing repair of 18:50 UTC on 28 Oct 2026 ran against that gate and
+was the box's own: both backfills cleared the range they were asked for before
+reading it, so the trailing repair of 28 Oct deleted the day's 28 live slots
+from `concurrent_metrics` in every cohort (and from the untracked
+`non_icao_metrics`), read nothing (144 reads in nine minutes: the first 59
+answered the 403 inside five seconds, and from the sixtieth at 18:50:11 UTC the
+archive answered 429, the box's address rate-limited on top of the gate by its
+own burst), wrote the day into `daily_metrics` as a zero row, and reported every
+cohort repaired; the untracked scan held its write transaction across its
+five-minute walk of the slots, so three refresh passes failed
+`ingest-snapshots-detection` with `database is locked`, and every pass from
+18:50:03 UTC failed `event-signals-feed`, whose export measures the snapshot
+against the newest metric row and found it a day old, seventeen passes to
+19:22 UTC. The watchdog paged at high at 19:00 UTC, and again at 19:02 UTC when
+the locked stage cleared and the one joined line re-keyed as a new problem. The
+rows were rebuilt at 19:23 UTC (main and military from the day's airborne
+`observations` grouped by `observed_at`, the untracked cohort by the tracker's
+own scan of the poller's cache, `--skip-download --cache-dir
+data/cache/adsbx_live`), the zero day row removed, and the 19:24 UTC pass ran
+clean. The rule since: a backfill deletes only what it has read again, in the
+one transaction that writes it, and a day's summary only for days it read; the
+untracked scan replaces each slot's rows as the slot is read and commits them;
+a read the archive refuses (429, 5xx, the verified-session 403) ends the run
+before any slot is retried, at exit 75 with the run recorded `skipped` in
+`ingestion_runs`, and the repair skips its remaining actions and cohorts
+without spending a day's attempt or failing, so a closed archive leaves every
+row as it was and is asked once a run, not 144 times; `status.js` names one
+problem per failed stage, so a stage's page holds while another comes or goes.
+BfS withdrew the EURDEP layer the same day: from 15:43:34 UTC on 28 Oct 2026
+every poll of `opendata:eurdep_latestValue` answers HTTP 400 `Feature type
+opendata:eurdep_latestValue unknown` and the service's capabilities list no
+EURDEP layer, while the German network reads whole; the watchdog paged it once
+at default at 18:34 UTC, at the sixth failed poll, and the German ODL network
+carries the gamma watch alone. Reading EURDEP again needs a source of Xyra's
+choosing.
 The reason is the record: in the two weeks to 19 Sept 2026 the old
 hash-of-the-whole-set rule sent about 150 pages (a false pair every night while
 the backup was mid-write, bursts every two minutes from a minute counter in the
@@ -207,7 +242,7 @@ repeated; see the re-entry protocol).
 | `warning-watch-cbrn.timer` | `cbrn_refresh.js` — collect the CBRN instruments (RadNet gamma telemetry, sampled air traffic), run the four directional detectors and the fusion pass; writes alert events only, never deliveries | every 5 min, one flocked pass |
 | `warning-watch-bfs.timer` | `ingest_cbrn_radiation.js --networks de,eurdep --budget-minutes 25` — read the two BfS gamma networks (German ODL, EURDEP) one page at a time, waiting out a starved database pool; the cadence gate allows one poll per network per 30 min | every 5 min, up to 25 min under the shared deploy lock |
 | `warning-watch-refresh-imports.timer` | same plus aircraft-metadata reimport | daily 00:29 |
-| `warning-watch-repair.timer` | `repair_history_gaps.js` — self-heals trailing gaps AND interior holes across all three cohorts, bounded to 30 days | every 6 h |
+| `warning-watch-repair.timer` | `repair_history_gaps.js` — self-heals trailing gaps AND interior holes across all three cohorts, bounded to 30 days; a read the archive refuses ends the run at exit 75 with nothing deleted that was not read again (28 Oct 2026) | every 6 h |
 | `warning-watch-watchdog.timer` | `ops_alert.js` — status verdict → ops ntfy topic (per-problem: pages after 3 min if present at half or more of the checks, 6 h re-page, daily `urgent` from 24 h, recovery note; a third party's server unread — a gamma network, the adsb.lol feed, the ADS-B Exchange archive — pages once at onset and once on recovery) | every 2 min |
 | `warning-watch-backup.timer` | `backup_databases.js` — `VACUUM INTO data/backups/<day>/` for all five DBs (three aviation cohorts, `ews-watch.sqlite`, `ews-cbrn.sqlite`), integrity-checked, 14 days kept; staleness feeds the existing status verdict. Restore requires stopping all relevant writers first. Off-box: manual sha256-verified copies land at `xyra-sanctuary:/srv/sanctuary/backups/warning-watch/<day>/` (automation pending a box→sanctuary credential) | daily 02:10 |
 | `cloudflared.service` | Cloudflare tunnel (its label in the Cloudflare dashboard is still the pre-rename `apocalypse-ews` — cosmetic, the connector authenticates by id) — serves <https://warning.watch> from loopback:3030 and <https://ntfy.warning.watch> from loopback:2586 with no open inbound ports. Installed via `cloudflared service install <token>`; ingress config lives in the CF dashboard/API (`config_src: cloudflare`), not on disk | always on |
@@ -1598,7 +1633,9 @@ the upstream reference site.
 | SQLITE_BUSY crashes | long writer + missing busy_timeout on a new DB open | every `new Database()` must be followed by `pragma('busy_timeout = 30000')` |
 | refresh exits 1 on `export_event_signals_feed` | snapshot vs DB timestamp skew > 35 min | genuine staleness — check ingestion; the 35-min slot tolerance is intentional (untracked cohort rounds `sampled_at`) |
 | refresh exits 1 on `ingest-snapshots-detection` with `UNIQUE constraint failed: live_snapshot.hex` | a heatmap parser read a callsign record as a second position for one hex | a position record has a lat field below 2^30 and a callsign record at or above it (see the heatmap note below); every parser of the format carries the same test, and a slice never holds two positions for one hex |
-| backfill locks everything | running an unpatched/old backfill | range DELETEs must commit before the download phase (fixed 2026-07-03); never run with default `--days 365` |
+| backfill locks everything | a backfill holding its write transaction across the download phase (the untracked scan did until 28 Oct 2026) | each slot's rows are replaced and committed as the slot is read, and a range's rows only in the one transaction that writes what was read (2026-07-03, 2026-10-28); never run with default `--days 365` |
+| repair summary `archiveUnread: true`, actions `skipped: "archive unread"`, an `ingestion_runs` row `skipped` with `archiveUnavailable` | the archive refused a read (429, 5xx, the verified-session 403): the backfill exits 75 before deleting or writing anything and the repair skips the rest | nothing of the box's; the next run asks again. A 429 that outlives the gate was the box's own burst (144 reads from 18:50 UTC on 28 Oct 2026); the repair now asks once a run |
+| a day's metric rows gone, a zero `daily_metrics` row, after a repair that reported the day repaired | a backfill before 28 Oct 2026 cleared the range before reading and read nothing | main and military: `INSERT INTO concurrent_metrics (sampled_at, concurrent_count) SELECT observed_at, COUNT(*) FROM observations WHERE source = 'adsbx_heatmap' AND is_airborne = 1 AND observed_at >= '<day>' AND observed_at < '<day+1>' GROUP BY observed_at` and delete the day's `daily_metrics` row; untracked: `track_non_icao_hex.py --db data/ews-untracked.sqlite --start-date <day> --end-date <day+1> --metrics-only --write-concurrent-metrics --skip-download --cache-dir data/cache/adsbx_live` under the deploy flock (done 19:23 UTC on 28 Oct 2026) |
 | ntfy topic spammed | ntfy.sh topics are public-write | self-host ntfy with write auth; rotate topic |
 
 ## Known operational notes

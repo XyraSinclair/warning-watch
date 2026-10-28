@@ -3,13 +3,14 @@
 import argparse
 import datetime as dt
 import json
+import os
 import pathlib
 import sqlite3
 import sys
 import time
 import urllib.error
 import urllib.request
-from adsbx_http import GLOBE_HEADERS
+from adsbx_http import GLOBE_HEADERS, ArchiveUnavailable, raise_if_archive_unavailable
 from parse_heatmap import parse_heatmap, str_to_point
 from db_migrations import migrate_schema
 
@@ -168,8 +169,11 @@ def download_heatmap(date_value, index, destination, rate_limit_seconds, timeout
         except urllib.error.HTTPError as error:
             if error.code == 404:
                 return False
-            # A 403 is the archive's refusal (since 28 Oct 2026 of every scripted read:
-            # "Historical data requires a verified session"); a retry asks the same closed door.
+            # The archive's own answers (429, 5xx, the verified-session 403) end the run
+            # before any slot is retried: on 28 Oct 2026 the repair's 48 reads in four
+            # seconds, each a 403, got the box's address rate-limited on top of the gate.
+            raise_if_archive_unavailable(error, heatmap_url_for(date_value, index))
+            # Any other 403 means our request is wrong; a retry asks the same closed door.
             if attempt == max_retries or error.code == 403:
                 print(
                     f"Skipping {heatmap_url_for(date_value, index)} after {attempt} HTTP failures: {error}",
@@ -239,54 +243,18 @@ def ingest_metrics(connection, tracked_by_hex, start_date, end_date, skip_downlo
     range_start_iso = f"{start_date.isoformat()}T00:00:00+00:00"
     range_end_iso = f"{end_date.isoformat()}T00:00:00+00:00"
     recompute_start = dt.datetime.combine(start_date, dt.time.min, tzinfo=dt.timezone.utc)
-    connection.execute(
-        """
-        DELETE FROM observations
-        WHERE source = 'adsbx_history'
-          AND observed_at >= ?
-          AND observed_at < ?
-        """,
-        (range_start_iso, range_end_iso),
-    )
-    connection.execute(
-        """
-        DELETE FROM concurrent_metrics
-        WHERE sampled_at >= ?
-          AND sampled_at < ?
-        """,
-        (range_start_iso, range_end_iso),
-    )
-    connection.execute(
-        """
-        DELETE FROM daily_metrics
-        WHERE day >= ?
-          AND day < ?
-        """,
-        (start_date.isoformat(), end_date.isoformat()),
-    )
-    connection.execute(
-        """
-        DELETE FROM takeoff_events
-        WHERE source = 'adsbx_history'
-          AND observed_at >= ?
-          AND observed_at < ?
-        """,
-        (range_start_iso, range_end_iso),
-    )
-    # This pass rewrites concurrent_metrics for the whole range from trace
-    # data. Slot rows are upserted below with source adsbx_history, but
-    # live_ingested is deliberately preserved: repair rewriting a count does
-    # not un-happen the live snapshot pass, and the takeoff-rate baseline
-    # keys off live_ingested.
     ensure_ingest_slots_table(connection)
-    # Commit the range DELETEs immediately: the download/parse phase below can
-    # run for hours, and holding the write transaction open across it starves
-    # every other consumer of the database (live pipeline, server). The
-    # backfill is idempotent per range, so a crash mid-run is repaired by
-    # rerunning the same range.
+    # Nothing is written, and nothing deleted, until the range has been read: the
+    # download/parse phase below can run for hours, and a write transaction held across
+    # it starves every other consumer of the database (live pipeline, server), while a
+    # range deleted before the reads is gone for good when the archive then answers
+    # nothing (on 28 Oct 2026 the repair deleted the day's 28 live slots from every
+    # cohort against a closed archive, read nothing, and reported the day repaired).
     connection.commit()
     total_files = (end_date - start_date).days * 48
     processed_files = 0
+    parsed_files = 0
+    skipped_files = 0
     concurrent_rows = []
     daily_rows_by_day = {}
     current_day = None
@@ -316,6 +284,8 @@ def ingest_metrics(connection, tracked_by_hex, start_date, end_date, skip_downlo
             destination = cache_path_for(date_value, index)
             if not skip_download:
                 available = download_heatmap(date_value, index, destination, rate_limit_seconds)
+                if available is None:
+                    skipped_files += 1
                 if not available:
                     continue
             elif not destination.exists():
@@ -329,6 +299,7 @@ def ingest_metrics(connection, tracked_by_hex, start_date, end_date, skip_downlo
             finally:
                 if destination.exists() and not keep_cache and not skip_download:
                     destination.unlink()
+            parsed_files += 1
 
             file_active_hexes = set()
             file_peak_concurrent = 0
@@ -414,6 +385,46 @@ def ingest_metrics(connection, tracked_by_hex, start_date, end_date, skip_downlo
     if current_day is not None:
         flush_day(current_day)
 
+    if parsed_files == 0:
+        if skipped_files:
+            raise ArchiveUnavailable(
+                f"no slot of {start_date} to {end_date} could be read: {skipped_files} reads skipped after retries"
+            )
+        print(f"The archive has no slot for {start_date} to {end_date}; nothing written", file=sys.stderr)
+        return
+
+    # The archive is the record for a range it answers: one transaction, committed by the
+    # caller, replaces the range's history rows with what was read. Slot rows are upserted
+    # with source adsbx_history, but live_ingested is deliberately preserved: repair
+    # rewriting a count does not un-happen the live snapshot pass, and the takeoff-rate
+    # baseline keys off live_ingested. A day's summary is replaced only for days read.
+    connection.execute(
+        """
+        DELETE FROM observations
+        WHERE source = 'adsbx_history'
+          AND observed_at >= ?
+          AND observed_at < ?
+        """,
+        (range_start_iso, range_end_iso),
+    )
+    connection.execute(
+        """
+        DELETE FROM concurrent_metrics
+        WHERE sampled_at >= ?
+          AND sampled_at < ?
+        """,
+        (range_start_iso, range_end_iso),
+    )
+    connection.execute(
+        """
+        DELETE FROM takeoff_events
+        WHERE source = 'adsbx_history'
+          AND observed_at >= ?
+          AND observed_at < ?
+        """,
+        (range_start_iso, range_end_iso),
+    )
+
     if concurrent_rows:
         connection.executemany(
             """
@@ -468,21 +479,8 @@ def ingest_metrics(connection, tracked_by_hex, start_date, end_date, skip_downlo
             takeoff_rows,
         )
 
-    final_daily_rows = []
-    for offset in range((end_date - start_date).days):
-        day_value = (start_date + dt.timedelta(days=offset)).isoformat()
-        final_daily_rows.append(
-            daily_rows_by_day.get(
-                day_value,
-                {
-                    "day": day_value,
-                    "unique_airborne_count": 0,
-                    "peak_concurrent_count": 0,
-                    "sample_count": 0,
-                },
-            )
-        )
-
+    final_daily_rows = list(daily_rows_by_day.values())
+    connection.executemany("DELETE FROM daily_metrics WHERE day = :day", final_daily_rows)
     connection.executemany(
         """
         INSERT INTO daily_metrics (
@@ -521,17 +519,18 @@ def main():
         raise ValueError("No tracked aircraft found. Run `npm run import:faa` first or pass --watchlist.")
 
     tracked_by_hex = {entry["hex"]: entry for entry in tracked_entries}
+    details = {
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "tracked_count": len(tracked_entries),
+        "tracking_mode": tracking_mode,
+    }
     connection.execute(
         """
         INSERT INTO ingestion_runs (run_type, started_at, status, details)
         VALUES (?, ?, ?, ?)
         """,
-        ("historical_backfill", dt.datetime.now(dt.timezone.utc).isoformat(), "running", json.dumps({
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat(),
-            "tracked_count": len(tracked_entries),
-            "tracking_mode": tracking_mode,
-        })),
+        ("historical_backfill", dt.datetime.now(dt.timezone.utc).isoformat(), "running", json.dumps(details)),
     )
     run_id = connection.execute("SELECT last_insert_rowid()").fetchone()[0]
 
@@ -553,6 +552,22 @@ def main():
             (dt.datetime.now(dt.timezone.utc).isoformat(), "completed", run_id),
         )
         connection.commit()
+    except ArchiveUnavailable as error:
+        # The archive's: nothing was deleted or written, the run is recorded as skipped
+        # and the caller (the repair) reads EX_TEMPFAIL as the archive unread, not a failure.
+        connection.rollback()
+        connection.execute(
+            "UPDATE ingestion_runs SET finished_at = ?, status = ?, details = ? WHERE id = ?",
+            (
+                dt.datetime.now(dt.timezone.utc).isoformat(),
+                "skipped",
+                json.dumps({**details, "archiveUnavailable": str(error)}),
+                run_id,
+            ),
+        )
+        connection.commit()
+        print(json.dumps({"ok": False, "archiveUnavailable": str(error)}))
+        sys.exit(os.EX_TEMPFAIL)
     except Exception:
         connection.execute(
             "UPDATE ingestion_runs SET finished_at = ?, status = ? WHERE id = ?",

@@ -12,7 +12,7 @@ import urllib.error
 import urllib.request
 from functools import lru_cache
 
-from adsbx_http import GLOBE_HEADERS
+from adsbx_http import GLOBE_HEADERS, ArchiveUnavailable, raise_if_archive_unavailable
 from parse_heatmap import parse_heatmap
 from db_migrations import migrate_schema
 
@@ -125,16 +125,6 @@ def heatmap_url_for(timestamp):
     )
 
 
-class ArchiveUnavailable(Exception):
-    """The archive did not answer a read, or has published nothing in the lookback window.
-
-    The archive is a third party's: nothing on the box ends this and the next pass asks
-    again, so the pipeline records it as a poll failure (EX_TEMPFAIL; lastPollError in
-    refresh-state.json) and not as a failed stage of the box's own. On 23 Oct 2026 four
-    reads timed out in eight minutes, each failed the ingest stage, and that paged at high.
-    """
-
-
 def download_heatmap(timestamp, destination, timeout_seconds=15):
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists():
@@ -148,17 +138,7 @@ def download_heatmap(timestamp, destination, timeout_seconds=15):
     except urllib.error.HTTPError as error:
         if error.code == 404:
             return False, False
-        # The server's own failures are the archive's, and so is the one refusal that names
-        # its reason: since 14:08 UTC on 28 Oct 2026 the archive answers every scripted read,
-        # from any vantage and with the globe headers, 403 "Historical data requires a
-        # verified session", a gate the globe page's own scripts open through reCAPTCHA and
-        # nothing on the box does. Any other refusal means our request is wrong.
-        if error.code == 429 or error.code >= 500:
-            raise ArchiveUnavailable(f"HTTP {error.code} from {url}") from error
-        if error.code == 403:
-            reason = error.read(300).decode("utf-8", "replace").strip()
-            if "verified session" in reason:
-                raise ArchiveUnavailable(f"{reason} (HTTP 403, {url})") from error
+        raise_if_archive_unavailable(error, url)
         raise
     except (urllib.error.URLError, TimeoutError, http.client.HTTPException, ConnectionError) as error:
         raise ArchiveUnavailable(f"{error} ({url})") from error

@@ -340,7 +340,14 @@ let archiveUnread = false;
 if (!report.polling) {
   problems.push('poll status missing — check warning-watch-refresh.service');
 } else {
-  if (report.polling.lastError) problems.push(`refresh pipeline: ${report.polling.lastError}`);
+  // One problem per failed stage: the watchdog keys a problem by its text, so a stage's
+  // page holds while another stage comes or goes (on 28 Oct 2026 the one joined line
+  // re-keyed as a second stage cleared and paged the same failure twice).
+  if (Array.isArray(report.polling.failedStages)) {
+    for (const stage of report.polling.failedStages) problems.push(`refresh pipeline: ${stage.label}: ${stage.message}`);
+  } else if (report.polling.lastError) {
+    problems.push(`refresh pipeline: ${report.polling.lastError}`);
+  }
   if (!Number.isFinite(report.polling.pollAgeMinutes) || report.polling.pollAgeMinutes > 10) {
     // Ten minutes without a whole read of the archive. While the passes run and the last
     // found the archive unanswering or empty (lastPollError), the gap is the archive's, a

@@ -3,6 +3,7 @@
 import argparse
 import datetime as dt
 import json
+import os
 import pathlib
 import sqlite3
 import sys
@@ -13,7 +14,7 @@ from collections import Counter, defaultdict
 
 import numpy as np
 
-from adsbx_http import GLOBE_HEADERS
+from adsbx_http import GLOBE_HEADERS, ArchiveUnavailable, raise_if_archive_unavailable
 from db_migrations import migrate_schema
 from update_latest_heatmap import download_heatmap as download_live_heatmap
 
@@ -176,6 +177,9 @@ def download_heatmap(date_value, index, destination, rate_limit_seconds, timeout
         except urllib.error.HTTPError as error:
             if error.code == 404:
                 return False
+            # The archive's own answers (429, 5xx, the verified-session 403) end the scan
+            # before any slot is retried; any other refusal means our request is wrong.
+            raise_if_archive_unavailable(error, heatmap_url_for(date_value, index))
             if attempt == max_retries:
                 print(f"Skipping {heatmap_url_for(date_value, index)} after HTTP failures: {error}", file=sys.stderr)
                 return None
@@ -906,6 +910,7 @@ def scan_range(
     total_files = (end_date - start_date).days * 48
     processed_files = 0
     parsed_files = 0
+    skipped_files = 0
     activity_rows = 0
     observation_count = 0
     latest_parsed_file = None
@@ -914,12 +919,14 @@ def scan_range(
         date_value = start_date + dt.timedelta(days=day_offset)
         for index in range(48):
             if max_files is not None and processed_files >= max_files:
-                return parsed_files, activity_rows, observation_count
+                return parsed_files, activity_rows, observation_count, latest_parsed_file
 
             processed_files += 1
             destination = cache_path_for(cache_dir, date_value, index)
             if not skip_download:
                 available = download_heatmap(date_value, index, destination, rate_limit_seconds)
+                if available is None:
+                    skipped_files += 1
                 if not available:
                     continue
             elif not destination.exists():
@@ -936,6 +943,10 @@ def scan_range(
                 print(f"Could not parse {destination}: {error}", file=sys.stderr)
                 continue
 
+            # Each slot replaces its own rows and is committed on its own: a scan over a
+            # day of slots never holds the write lock across a download, and a slot the
+            # archive does not answer keeps the rows the live pass gave it.
+            connection.commit()
             parsed_files += 1
             activity_rows += file_activity_rows
             observation_count += file_observation_count
@@ -943,6 +954,10 @@ def scan_range(
             if processed_files % 48 == 0:
                 print(f"Processed {processed_files}/{total_files} heatmap files", file=sys.stderr)
 
+    if parsed_files == 0 and skipped_files:
+        raise ArchiveUnavailable(
+            f"no slot of {start_date} to {end_date} could be read: {skipped_files} reads skipped after retries"
+        )
     return parsed_files, activity_rows, observation_count, latest_parsed_file
 
 
@@ -1109,40 +1124,20 @@ def main():
     if start_date >= end_date:
         raise ValueError("Start date must be before end date.")
 
-    range_start_iso = f"{start_date.isoformat()}T00:00:00+00:00"
-    range_end_iso = f"{end_date.isoformat()}T00:00:00+00:00"
-    if args.write_concurrent_metrics:
-        connection.execute(
-            """
-            DELETE FROM concurrent_metrics
-            WHERE sampled_at >= ?
-              AND sampled_at < ?
-            """,
-            (range_start_iso, range_end_iso),
-        )
-    if args.metrics_only:
-        connection.execute(
-            """
-            DELETE FROM non_icao_metrics
-            WHERE sampled_at >= ?
-              AND sampled_at < ?
-              AND source = ?
-            """,
-            (range_start_iso, range_end_iso, SOURCE),
-        )
+    # No range is cleared ahead of the reads: ingest_file replaces each slot's rows as the
+    # slot is read, so the scan writes nothing it has not read (on 28 Oct 2026 a range
+    # cleared against a closed archive took the day's 28 live slots with it, and the
+    # write lock held across the five-minute scan locked the refresh pass out).
+    details = {"start_date": start_date.isoformat(), "end_date": end_date.isoformat()}
     connection.execute(
         """
         INSERT INTO ingestion_runs (run_type, started_at, status, details)
         VALUES (?, ?, ?, ?)
         """,
-        (
-            "non_icao_scan",
-            dt.datetime.now(dt.timezone.utc).isoformat(),
-            "running",
-                json.dumps({"start_date": start_date.isoformat(), "end_date": end_date.isoformat()}),
-        ),
+        ("non_icao_scan", dt.datetime.now(dt.timezone.utc).isoformat(), "running", json.dumps(details)),
     )
     run_id = connection.execute("SELECT last_insert_rowid()").fetchone()[0]
+    connection.commit()
 
     try:
         parsed_files, activity_rows, observation_count, latest_parsed_file = scan_range(
@@ -1183,6 +1178,22 @@ def main():
             ),
         )
         connection.commit()
+    except ArchiveUnavailable as error:
+        # The archive's: the slots read so far are committed, the run is recorded as
+        # skipped and the caller (the repair) reads EX_TEMPFAIL as the archive unread.
+        connection.rollback()
+        connection.execute(
+            "UPDATE ingestion_runs SET finished_at = ?, status = ?, details = ? WHERE id = ?",
+            (
+                dt.datetime.now(dt.timezone.utc).isoformat(),
+                "skipped",
+                json.dumps({**details, "archiveUnavailable": str(error)}),
+                run_id,
+            ),
+        )
+        connection.commit()
+        print(json.dumps({"ok": False, "archiveUnavailable": str(error)}))
+        sys.exit(os.EX_TEMPFAIL)
     except Exception:
         connection.execute(
             "UPDATE ingestion_runs SET finished_at = ?, status = ? WHERE id = ?",
