@@ -56,11 +56,7 @@ async function publish(server, topic, event, dryRun) {
   const headers = {
     Title: title,
     Priority: retracted ? 'default' : PRIORITY_BY_SEVERITY[event.severity] || 'default',
-    // The tag is the first thing a subscriber sees on a lock screen, so it
-    // must not tell a radiation alert that it is about aeroplanes.
-    Tags: retracted ? 'white_check_mark' : event.cohort === 'cbrn'
-      ? (event.kind === 'cbrn_radiation_anomaly' ? 'radioactive,warning' : event.kind === 'cbrn_seismic_event' ? 'radioactive,collision' : 'warning,skull')
-      : 'rotating_light,airplane',
+    Tags: retracted ? 'white_check_mark' : 'rotating_light,airplane',
   };
   const token = String(process.env.EWS_NTFY_TOKEN || '').trim();
   if (token) headers.Authorization = `Bearer ${token}`;

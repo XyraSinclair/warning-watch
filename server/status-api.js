@@ -46,53 +46,6 @@ function readAlerts(db) {
   ).all(MAX_ALERTS);
 }
 
-function readRadiation(db) {
-  if (!db) return { networks: [], reporting: 0, stationsArmed: 0, stationsTotal: 0 };
-  try {
-    // The collector's own record of each network: its last whole read and the
-    // failed polls since, so the page can say why a network has no new reading.
-    const runs = new Map(
-      db.prepare("SELECT source, last_success_at, consecutive_failures FROM cbrn_ingest_runs").all().map((row) => [row.source, row]),
-    );
-    const networks = db.prepare(
-      `SELECT source, COUNT(DISTINCT station_id) AS stations, MAX(observed_at) AS newestReading
-         FROM cbrn_readings GROUP BY source ORDER BY source`,
-    ).all().map((row) => ({
-      source: row.source,
-      stations: row.stations,
-      newestReading: row.newestReading,
-      ageMinutes: minutesSince(row.newestReading),
-      lastRead: runs.get(row.source)?.last_success_at ?? null,
-      failedPolls: runs.get(row.source)?.consecutive_failures ?? 0,
-    }));
-    // A station can only alert once it carries the minimum baseline itself.
-    const armed = db.prepare(
-      "SELECT COUNT(*) AS n FROM (SELECT 1 FROM cbrn_readings GROUP BY source, station_id HAVING COUNT(*) >= 48)",
-    ).get();
-    return {
-      networks,
-      reporting: networks.filter((n) => n.ageMinutes != null && n.ageMinutes <= 240).length,
-      stationsArmed: armed?.n ?? 0,
-      stationsTotal: networks.reduce((sum, network) => sum + network.stations, 0),
-    };
-  } catch {
-    return { networks: [], reporting: 0, stationsArmed: 0, stationsTotal: 0 };
-  }
-}
-
-function readCbrnAircraft(db) {
-  if (!db) return { regions: 0, newestSample: null, ageMinutes: null, newestPass: null };
-  try {
-    const row = db.prepare("SELECT COUNT(DISTINCT region) AS regions, MAX(sampled_at) AS newestSample FROM cbrn_aircraft_slots").get();
-    // A pass stamps its end whether or not adsb.lol answered; a sample exists
-    // only when a control region did. The off-box dead-man reads the pass.
-    const pass = db.prepare("SELECT last_attempt_at AS endedAt FROM cbrn_ingest_runs WHERE source = 'adsb.lol'").get();
-    return { regions: row?.regions ?? 0, newestSample: row?.newestSample ?? null, ageMinutes: minutesSince(row?.newestSample), newestPass: pass?.endedAt ?? null };
-  } catch {
-    return { regions: 0, newestSample: null, ageMinutes: null, newestPass: null };
-  }
-}
-
 // Course behaviour and departures live in the aviation cohort databases. The
 // page asks only for counts and arming state, never aircraft or positions.
 function readAviation(db) {
@@ -143,27 +96,6 @@ const COHORTS = [
   ["unregistered", "Aircraft broadcasting no registered address", "EWS_UNTRACKED_DB_PATH", "ews-untracked.sqlite"],
 ];
 
-// The watch sources that feed a rule on the page. Their health is a public
-// fact: a rule whose input has never answered is not an instrument.
-const RULE_SOURCES = ["nws-civil-alerts", "nrc-events", "nrc-reactor-status", "faa-tfr", "usgs-significant", "usgs-relevant", "bluesky-posts", "gdelt-reporting"];
-
-function readSources(db) {
-  if (!db) return [];
-  try {
-    const now = Date.now();
-    return db.prepare(
-      `SELECT id, success_at AS successAt, json_extract(definition, '$.staleSeconds') AS staleSeconds
-         FROM watch_sources WHERE enabled = 1 AND id IN (${RULE_SOURCES.map(() => "?").join(", ")}) ORDER BY id`,
-    ).all(...RULE_SOURCES).map((row) => ({
-      id: row.id,
-      lastSuccessAt: row.successAt == null ? null : new Date(row.successAt).toISOString(),
-      health: row.successAt == null ? "never" : now - row.successAt > Number(row.staleSeconds) * 1000 ? "stale" : "live",
-    }));
-  } catch {
-    return [];
-  }
-}
-
 function readCohorts() {
   return COHORTS.map(([key, label, envKey, file]) => {
     const db = open(resolveDb(envKey) || path.join(DATA_DIR, file));
@@ -202,26 +134,17 @@ function readArchive() {
 
 function getStatusSummary(mainDbPath) {
   const mainPath = mainDbPath || resolveDb("EWS_DB_PATH") || path.join(DATA_DIR, "ews-main.sqlite");
-  const cbrnPath = resolveDb("EWS_CBRN_DB_PATH") || path.join(DATA_DIR, "ews-cbrn.sqlite");
-  const watchPath = resolveDb("EWS_WATCH_DB_PATH") || path.join(DATA_DIR, "ews-watch.sqlite");
-  const cbrn = open(cbrnPath);
   const main = open(mainPath);
-  const watch = open(watchPath);
   try {
     return {
       generatedAt: new Date().toISOString(),
       alerts: readAlerts(main),
-      radiation: readRadiation(cbrn),
-      aircraft: readCbrnAircraft(cbrn),
       aviation: readAviation(main),
       cohorts: readCohorts(),
       archive: readArchive(),
-      sources: readSources(watch),
     };
   } finally {
-    cbrn?.close();
     main?.close();
-    watch?.close();
   }
 }
 

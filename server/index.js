@@ -35,12 +35,7 @@ const {
 
 loadEnvFile();
 
-const { openWatchDb, syncSources } = require("./watch-store");
-const { SOURCE_DEFINITIONS } = require("./watch-sources");
-const { mountWatchRoutes } = require("./watch-api");
 const { mountStatusRoutes } = require("./status-api");
-const watchDb = openWatchDb();
-syncSources(watchDb, SOURCE_DEFINITIONS);
 
 const app = express();
 const PORT = Number(process.env.PORT || 3030);
@@ -334,7 +329,6 @@ app.get("/api/event-signals", (_request, response) => {
   response.set("cache-control", "no-store").json(readPublishedJson("event-signals.json"));
 });
 
-mountWatchRoutes(app, { getDb: () => watchDb, requireInternalAuth });
 mountStatusRoutes(app, { getDbPath: () => DB_PATH, getChannels: () => channelAvailability(process.env) });
 
 // In-process fixed-window rate limiter for the public write endpoints. The

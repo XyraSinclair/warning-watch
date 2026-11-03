@@ -31,8 +31,6 @@
     "detect:alerts": "node scripts/detect_alert_events.js",
     "dispatch:alerts": "node scripts/dispatch_alert_events.js",
     "refresh:all": "node scripts/refresh_all_snapshots.js",
-    "watch:run": "node scripts/run_watch.js",
-    "cbrn:refresh": "node scripts/cbrn_refresh.js",
     "rss:update": "node scripts/update_rss_feed.js",
     "telegram:alert": "node scripts/send_telegram_alert.js",
     "smoke:alert-pipeline": "node scripts/smoke_alert_pipeline.js",

@@ -8,14 +8,12 @@ ntfy.sh topic. It names two conditions and never calls one by the other's name.
 Down: the site does not answer. Two consecutive fetch failures (a single
 failure is the network), a non-200, or an unparseable payload. Urgent.
 
-Stalled: the site answers and its newest aircraft pass ended more than
-STALE_MINUTES ago. A pass starts every five minutes and ends up to four
-minutes after its slot, and it stamps its end whether or not adsb.lol
-answered, so one missing pass is a deploy holding the lock or a killed stage
-and two are a stall. High. The first rule read the newest sample, which the
-ingest does not write when both control regions are unreachable: on 6 Oct 2026
-two passes in a row timed out on both and it paged a stall while every pass
-ran on time. A feed that will not answer is the box watchdog's page.
+Stalled: the site answers and its newest aircraft refresh pass is more than
+STALE_MINUTES old. A pass starts every two minutes and stamps itself whether
+or not the ADS-B Exchange archive answered, so a missing pass or two is a
+deploy holding the lock and seven are a stall. High. It reads the pass, not
+the newest sample: an archive that will not answer is the box watchdog's
+page, not a stall.
 
 It pages on the transition, again when a stall becomes an outage, every
 REPAGE_HOURS while either holds, and sends one recovery note.
@@ -33,9 +31,8 @@ import urllib.request
 STATUS_URL = os.environ.get("DEADMAN_STATUS_URL", "https://warning.watch/api/status")
 NTFY_URL = os.environ.get("DEADMAN_NTFY_URL", "").strip()
 STATE_PATH = os.environ.get("DEADMAN_STATE", os.path.expanduser("~/.local/state/warning-watch-deadman.json"))
-SAMPLE_MINUTES = 5  # warning-watch-cbrn.timer
-LANDING_MINUTES = 4  # median 105 s, slowest 209 s in the 24 h to 18:00 UTC on 6 Oct 2026, adsb.lol slow; a pass that asks regions again ends 180 s after its radiation poll
-STALE_MINUTES = 2 * SAMPLE_MINUTES + LANDING_MINUTES
+SAMPLE_MINUTES = 2  # warning-watch-refresh.timer
+STALE_MINUTES = 14
 FAILURES_TO_PAGE = 2
 REPAGE_HOURS = 6
 
@@ -52,12 +49,12 @@ def probe():
         return "down", f"fetch failed: {type(error).__name__}: {error}"[:200]
     try:
         payload = json.loads(body)
-        newest = payload["aircraft"]["newestPass"]
+        newest = payload["archive"]["lastAttemptAt"]
         age_minutes = (time.time() - calendar.timegm(time.strptime(newest[:19], "%Y-%m-%dT%H:%M:%S"))) / 60
     except Exception as error:  # noqa: BLE001
         return "down", f"status unreadable: {type(error).__name__}: {error}"[:200]
     if age_minutes > STALE_MINUTES:
-        return "stalled", f"newest aircraft pass ended {age_minutes:.0f} min ago"
+        return "stalled", f"newest aircraft refresh pass was {age_minutes:.0f} min ago"
     return None
 
 
@@ -106,7 +103,7 @@ def main():
             else:
                 page(
                     "warning.watch is up, aircraft sampling stalled",
-                    f"The site answers; {reason}, and one ends every {SAMPLE_MINUTES}.\nCheck warning-watch-cbrn.timer and its last run on the box.",
+                    f"The site answers; {reason}, and one starts every {SAMPLE_MINUTES}.\nCheck warning-watch-refresh.timer and its last run on the box.",
                     "high",
                     "warning",
                 )

@@ -11,7 +11,7 @@ const BACKUP_ROOT = process.env.EWS_BACKUP_DIR
   ? path.resolve(process.env.EWS_BACKUP_DIR)
   : path.join(DATA_DIR, "backups");
 const KEEP_DAYS = Number(process.env.EWS_BACKUP_KEEP_DAYS || 14);
-const DB_NAMES = ["ews-main.sqlite", "ews-military.sqlite", "ews-untracked.sqlite", "ews-watch.sqlite", "ews-cbrn.sqlite"];
+const DB_NAMES = ["ews-main.sqlite", "ews-military.sqlite", "ews-untracked.sqlite"];
 
 function backupOne(sourcePath, destDir) {
   const name = path.basename(sourcePath);

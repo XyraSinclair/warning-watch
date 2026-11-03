@@ -138,10 +138,6 @@ function serviceStates() {
     systemdState('warning-watch-canary.service'),
     systemdState('warning-watch-selftest.timer'),
     systemdState('warning-watch-selftest.service'),
-    systemdState('warning-watch-cbrn.timer'),
-    systemdState('warning-watch-cbrn.service'),
-    systemdState('warning-watch-bfs.timer'),
-    systemdState('warning-watch-bfs.service'),
   ];
 }
 
@@ -157,7 +153,7 @@ function backupsReport() {
   // A day directory still being written is not a short backup: it paged a
   // false alarm every night at 02:10 UTC until 19 Sept 2026.
   const dirAgeMinutes = safe(() => (Date.now() - fs.statSync(path.join(backupRoot, latestDay)).mtimeMs) / 60000, Infinity);
-  return { latestDay, dayCount: days.length, latestFiles: files.length, ageHours, inProgress: files.length < 5 && dirAgeMinutes < 30 };
+  return { latestDay, dayCount: days.length, latestFiles: files.length, ageHours, inProgress: files.length < 3 && dirAgeMinutes < 30 };
 }
 
 function alertsReport() {
@@ -173,127 +169,6 @@ function alertsReport() {
         .map((row) => [row.key, Number(row.value)])
     ), {});
     return { totalEvents: total, lastEvent: last || null, publisherCursors: cursors };
-  } finally {
-    db.close();
-  }
-}
-
-function watchReport() {
-  const filename = process.env.EWS_WATCH_DB_PATH || path.join(DATA_DIR, 'ews-watch.sqlite');
-  if (!fs.existsSync(filename)) return { available: false, healthy: false, error: 'Watch database has not been initialized.' };
-  const db = new Database(filename, { readonly: true, fileMustExist: true });
-  try {
-    const { getWatchSnapshot } = require('../server/watch-store');
-    const snapshot = getWatchSnapshot(db, { internal: true, limit: 1 });
-    const lastRunAgeMinutes = snapshot.run.lastFinishedAt
-      ? Math.round((Date.now() - Date.parse(snapshot.run.lastFinishedAt)) / 60000) : null;
-    // A check that succeeded with a lane missing is degraded without a check
-    // error: name the lane and what it hit, so the page says what failed.
-    const gapDetail = (metadata) => metadata?.incompleteLanes?.length
-      ? metadata.incompleteLanes.map((lane) => `${lane.lane} lane: ${lane.message}`).join('; ') : null;
-    // Unhealthy means no complete read inside the source's own tolerance: say how long.
-    const age = (ms) => ms < 120 * 60000 ? `${Math.round(ms / 60000)}m` : ms < 72 * 3600000 ? `${Math.round(ms / 3600000)}h` : `${Math.round(ms / 86400000)}d`;
-    const unread = (source) => source.lastCompleteAt == null ? 'never read completely'
-      : Date.now() - Date.parse(source.lastCompleteAt) > source.staleSeconds * 1000
-        ? `${age(Date.now() - Date.parse(source.lastCompleteAt))} since a complete read` : null;
-    const sourceProblems = snapshot.sources.filter((source) => source.enabled && source.health !== 'healthy')
-      .map((source) => ({ id: source.id, health: source.health, error: [unread(source), source.lastError ?? gapDetail(source.metadata)].filter(Boolean).join('; ') || null, recovery: source.recovery }));
-    const services = process.platform === 'darwin' ? [] : [
-      systemdState('warning-watch-sources.timer'), systemdState('warning-watch-sources.service'),
-    ];
-    return {
-      available: true, ...snapshot.counts, run: snapshot.run, agent: snapshot.agent,
-      budget: snapshot.budget, processing: snapshot.processing, lastRunAgeMinutes, sourceProblems, services,
-      healthy: lastRunAgeMinutes != null && lastRunAgeMinutes <= 6 && !snapshot.run.lastError
-        && snapshot.agent.configured && sourceProblems.length === 0
-        && ['running', 'idle'].includes(snapshot.processing.state)
-        && services.every((service) => service.loaded && service.lastState !== 'failed' && (!service.agent.endsWith('.timer') || (service.running && service.enabled === 'enabled'))),
-    };
-  } catch (error) {
-    return { available: false, healthy: false, error: `Watch status could not be read: ${error.message}` };
-  } finally {
-    db.close();
-  }
-}
-
-function cbrnReport() {
-  const state = safe(() => JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'cbrn-refresh-state.json'), 'utf8')), null);
-  const runAgeMinutes = state?.lastSuccessAt
-    ? Math.round((Date.now() - Date.parse(state.lastSuccessAt)) / 60000) : null;
-  const failedStages = state?.failedStages ?? [];
-  const dbPath = process.env.EWS_CBRN_DB_PATH || path.join(DATA_DIR, 'ews-cbrn.sqlite');
-  if (!fs.existsSync(dbPath)) {
-    return { available: false, healthy: false, runAgeMinutes, failedStages, error: 'CBRN database has not been initialized.' };
-  }
-  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
-  db.pragma('busy_timeout = 5000');
-  try {
-    const readings = safe(() => db.prepare(
-      'SELECT source, COUNT(DISTINCT station_id) AS stations, MAX(observed_at) AS newestReading FROM cbrn_readings GROUP BY source ORDER BY source',
-    ).all(), []);
-    const ingest = safe(() => db.prepare(
-      'SELECT source, last_success_at AS lastSuccessAt, last_error AS lastError, consecutive_failures AS consecutiveFailures FROM cbrn_ingest_runs ORDER BY source',
-    ).all(), []);
-    const ingestBySource = new Map(ingest.map((row) => [row.source, row]));
-    const networks = readings.map((row) => ({ ...row, ...(ingestBySource.get(row.source) ?? {}) }));
-    // A source that reports health but no readings (or readings but no health)
-    // is itself a wiring defect, so surface both sets rather than intersecting.
-    for (const row of ingest) {
-      if (!readings.some((reading) => reading.source === row.source)) {
-        networks.push({ source: row.source, stations: 0, newestReading: null, ...row });
-      }
-    }
-    const aircraft = safe(() => db.prepare(
-      'SELECT COUNT(DISTINCT region) AS regions, MAX(sampled_at) AS newestSample FROM cbrn_aircraft_slots',
-    ).get(), {});
-    const lexical = safe(() => db.prepare(
-      'SELECT COUNT(*) AS buckets, MAX(bucket_start) AS newestBucket FROM cbrn_lexical_buckets',
-    ).get(), {});
-    const alerts24h = safe(() => {
-      const mainPath = process.env.EWS_DB_PATH || path.join(DATA_DIR, 'ews-main.sqlite');
-      if (!fs.existsSync(mainPath)) return null;
-      const main = new Database(mainPath, { readonly: true, fileMustExist: true });
-      try {
-        return main.prepare(
-          "SELECT severity, COUNT(*) AS count FROM alert_events WHERE cohort = 'cbrn' AND created_at >= datetime('now', '-1 day') GROUP BY severity",
-        ).all();
-      } finally {
-        main.close();
-      }
-    }, null);
-    const newestReadingAgeMinutes = (value) => (value ? Math.round((Date.now() - Date.parse(value)) / 60000) : null);
-    const radiation = networks.map((network) => ({
-      source: network.source,
-      stations: network.stations ?? 0,
-      newestReading: network.newestReading ?? null,
-      readingAgeMinutes: newestReadingAgeMinutes(network.newestReading),
-      consecutiveFailures: network.consecutiveFailures ?? 0,
-      lastSuccessAt: network.lastSuccessAt ?? null,
-      lastError: network.lastError ?? null,
-    }));
-    const reporting = radiation.filter((network) => network.stations > 0
-      && network.readingAgeMinutes != null && network.readingAgeMinutes <= 240);
-    return {
-      available: true,
-      runAgeMinutes,
-      failedStages,
-      lastError: state?.lastError ?? null,
-      networks: radiation,
-      reportingNetworks: reporting.length,
-      aircraft: {
-        regions: aircraft?.regions ?? 0,
-        newestSample: aircraft?.newestSample ?? null,
-        sampleAgeMinutes: newestReadingAgeMinutes(aircraft?.newestSample),
-      },
-      lexical: { buckets: lexical?.buckets ?? 0, newestBucket: lexical?.newestBucket ?? null },
-      alerts24h,
-      healthy: runAgeMinutes != null && runAgeMinutes <= 15
-        && failedStages.length === 0
-        && reporting.length > 0
-        && radiation.every((network) => network.consecutiveFailures < 6),
-    };
-  } catch (error) {
-    return { available: false, healthy: false, runAgeMinutes, failedStages, error: `CBRN status could not be read: ${error.message}` };
   } finally {
     db.close();
   }
@@ -321,8 +196,6 @@ const report = {
     return 'ok';
   }, 'unreachable'),
   alerts: alertsReport(),
-  watch: watchReport(),
-  cbrn: cbrnReport(),
   backups: process.platform === 'darwin' ? null : backupsReport(),
   verdict: null,
 };
@@ -400,43 +273,10 @@ for (const service of report.services) {
   else if (service.lastState === 'failed') problems.push(`${service.agent}: failed — check journalctl -u ${service.agent}`);
 }
 if (report.serverHttp !== 'ok') problems.push('dashboard server unreachable on :3030');
-// The watch sources that can raise a public alert and are fetching today. NRC
-// has never fetched (HTTP 403): a standing gap the page must state, not a page.
-// USGS feeds explosion verification only; its health shows on the page.
-const ALERTING_WATCH_SOURCES = ['nws-civil-alerts', 'faa-tfr'];
-for (const source of report.watch?.sourceProblems ?? []) {
-  if (ALERTING_WATCH_SOURCES.includes(source.id)) problems.push(`watch source ${source.id}: ${source.health} (${source.error ?? 'no detail'})`);
-}
-if (report.cbrn) {
-  // The CBRN instrument is not allowed to fail quietly: a stopped radiation
-  // network is an observation gap, and an observation gap is a problem.
-  if (!report.cbrn.available) {
-    problems.push(`cbrn: ${report.cbrn.error ?? 'status unavailable'}`);
-  } else {
-    if (report.cbrn.runAgeMinutes == null || report.cbrn.runAgeMinutes > 15) {
-      problems.push(`cbrn: refresh stale (${report.cbrn.runAgeMinutes}m > 15m bound) — check warning-watch-cbrn.timer`);
-    }
-    for (const stage of report.cbrn.failedStages ?? []) {
-      problems.push(`cbrn stage ${stage.stage}: ${stage.error}`);
-    }
-    if (!report.cbrn.reportingNetworks) {
-      problems.push('cbrn: no gamma network reported within 4h — the radiological instrument is blind');
-    }
-    for (const network of report.cbrn.networks ?? []) {
-      if (network.consecutiveFailures >= 6) {
-        // The detail names the last whole read, so the page says how long the
-        // instrument has been blind and not how long the count has stood at six;
-        // it stays inside the parenthesis the problem's identity ignores.
-        const unread = network.lastSuccessAt ? `unread since ${network.lastSuccessAt.slice(0, 16).replace('T', ' ')} UTC` : 'never read';
-        problems.push(`cbrn network ${network.source}: ${network.consecutiveFailures} consecutive collection failures (${unread}; ${network.lastError ?? 'no detail'})`);
-      }
-    }
-  }
-}
 if (report.backups) {
   if (!report.backups.dayCount) problems.push('no sqlite backups yet — run npm run backup');
   else if (report.backups.inProgress) { /* judged once the write has had 30 minutes */ }
-  else if (report.backups.latestFiles < 5) problems.push(`latest backup day ${report.backups.latestDay} has ${report.backups.latestFiles}/5 databases`);
+  else if (report.backups.latestFiles < 3) problems.push(`latest backup day ${report.backups.latestDay} has ${report.backups.latestFiles}/3 databases`);
   else if (report.backups.ageHours > 50) problems.push(`sqlite backups stale (${report.backups.ageHours}h) — check warning-watch-backup.timer`);
 }
 report.verdict = problems.length ? { healthy: false, problems } : { healthy: true };

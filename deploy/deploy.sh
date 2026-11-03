@@ -22,9 +22,6 @@ if [ -d node_modules ] && [ "$(cat "$stamp" 2>/dev/null)" = "$lock_hash" ]; then
   echo "install: node_modules already matches package-lock.json"
 else
   echo "install: waiting for in-flight passes, then npm ci"
-  # The BfS reader holds the shared lock for up to 25 minutes; its poll is
-  # stopped (the timer starts the next one) rather than waited for.
-  systemctl stop warning-watch-bfs.service 2>/dev/null || true
   as_xyra flock -x -w 600 tmp/deploy.flock npm ci --include=dev \
     || { echo "install: FAILED (lock wait or npm ci); nothing restarted" >&2; exit 1; }
   echo "$lock_hash" | as_xyra tee "$stamp" >/dev/null

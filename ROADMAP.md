@@ -1,16 +1,7 @@
 # Roadmap — from "runs on my laptop" to premier public signal
 
-**Strategic redesign, 5 September 2026, revised with Fable and Kimi:** the
-continuous digital watch, agent tasking, and observation-first work sequence
-are in [https://github.com/XyraSinclair/warning-watch/blob/main/NUCLEAR-WARNING-STRATEGY.md](https://github.com/XyraSinclair/warning-watch/blob/main/NUCLEAR-WARNING-STRATEGY.md).
-The concrete collection register is
-[https://github.com/XyraSinclair/warning-watch/blob/main/DIGITAL-SIGNAL-REGISTER.md](https://github.com/XyraSinclair/warning-watch/blob/main/DIGITAL-SIGNAL-REGISTER.md).
-The implementation roadmap below records the aviation-anomaly approach. Its
-statistical goals must not be read as validated nuclear-warning capability.
-
-The initial continuous watch is implemented separately from the aviation
-calibration roadmap. Its enabled sources, bounds, operator-only assessments,
-and remaining coverage limits are documented in [OPERATIONS.md](OPERATIONS.md).
+The CBRN layer and the continuous digital watch were removed on 3 Nov 2026;
+this roadmap is the aviation instrument alone. Git history holds the rest.
 
 ## State of the watch, 19 September 2026 (measured on the live box)
 
@@ -74,86 +65,6 @@ Each rung closes before the next opens; each is judged by a number.
 5. **Published firing record.** Every public alert, its ladder, and its
    after-the-fact verdict on the page. Trust is the empirical alert frequency
    matching the advertised one.
-
-### Nuclear monitoring: what exists, what is missing
-
-Objectives, in priority order: (N1) a detonation or major release anywhere is
-reported within the hour; (N2) near-zero false public alarms; (N3) open sources
-only; (N4) posture change is visible to the operator before it is visible to
-the public.
-
-| Layer | Today | Gap |
-|---|---|---|
-| Ambient gamma | BfS + EURDEP mirror, hourly, coherence-gated; EPA RadNet from 19 Sept (140 US monitors, hourly, persistence-gated: CBRN-WATCH.md § 3; live: 140/140 answered, 111 reporting within 3 h, an hourly poll is 7 s and 5.7 MB, 133,307 readings seeded so 136 monitors are armed) | Nothing over East or South Asia, the Middle East, Russia. Checked 19 Sept: Safecast's open API is sparse and mostly stale, Japan NRA has no data feed |
-| Detonation | Rule live 19 Sept: classification `nuclear explosion` → critical; M ≥ 3.5 in a test-site geofence → high when shallow or when the depth is undetermined at a seismically quiet site, elevated when undetermined at an active one; `explosion` M ≥ 4 anywhere → elevated (CBRN-WATCH.md § 6a) | Replayed on the catalogue since 2000: all six DPRK tests critical, one non-test high, eight elevated in 26.7 years. Not yet seen: a live first-solution's latency and typing |
-| Facility events | NRC event notifications + reactor status | United States only |
-| Official warning | NWS CAP nuclear / radiological / hazmat types, relayed verbatim at critical | United States only |
-| Agency reporting | IAEA news (operator surface) | Latency unmeasured |
-| Posture | special-mission aircraft presence (operator surface) | No baseline for strategic command-post or tanker activity |
-
-Candidate sources, each verified by a live fetch before it was designed around.
-Fetched 19 Sept: EPA RadNet serves near-real-time hourly gamma (the earlier
-"laboratory data only" note was wrong) and is now ingested; Safecast's
-measurements API returns 2018 as its newest rows and its realtime device list is
-a few dozen volunteer sensors, most silent for weeks; Japan NRA's monitoring
-site is a browser app with no data endpoint. Non-US official warnings, fetched
-19 Sept and both usable: Canada's NAADS (`rss1.naad-adna.pelmorex.com`, Atom
-with CAP 1.1 categories — 212 live entries, 1.2 MB, every alert linking its full
-CAP XML in the `capcp1` archive; today's are all Environment Canada weather, so
-the CBRN filter is the `category`/`event` terms) and Germany's NINA MoWaS
-(`warnung.bund.de/api31/mowas/mapData.json`, 3 live civil-protection warnings
-with BBK event codes; `dwd`, `katwarn`, `biwapp`, `lhp`, `police` sit beside it).
-MeteoAlarm's legacy atom is gone (404); the UK and Japan publish no feed. CTBTO
-IMS and IAEA USIE stay out: treaty- and member-restricted.
-
-Order within rung 4: detonation rule first (done 19 Sept: one feed already
-ingested, highest consequence, lowest false-alarm surface), then gamma coverage
-outside Europe (RadNet done 19 Sept; nothing further is openly available), then
-non-US official warnings (next: NAADS and NINA, verified above, not yet built).
-
-## CBRN alarm layer (implemented 10 September 2026)
-
-**Calibration correction, 11 September 2026.** The severity ladder was firing
-about seven times more often than this document specifies — one public alert
-every two days against a target of roughly monthly. The cause was treating
-count series as if their tails were Gaussian: a 3.5-sigma departure on thirty
-seconds of thought is not, on real takeoff data, a rare event. Every evaluated
-slot's score is now recorded, severity thresholds are empirical quantiles of
-that record with the allowed exceedance count annualised from the span actually
-covered, a tier fires only on a strict exceedance of the (k+1)-th largest
-score, and no tier is reported unless its threshold is strictly separated from
-the one below. Until five hundred slots exist the ladder falls back to
-5.0 / 6.5 / 8.0 and each event carries the ladder it was judged against. The
-public tier also now excludes agency reports: a published outbreak bulletin is
-a report, not one of our detections, and stays on the operator surface.
-
-The system's product focus is CBRN risk, and the instrument that carries it is
-the deterministic alarm layer documented in [CBRN-WATCH.md](CBRN-WATCH.md):
-open gamma telemetry, sampled civil air traffic over CBRN-relevant geographies,
-public vocabulary bursts, and authority notices, all gated by a statistical
-departure *and* an absolute physical magnitude, and all delivered through the
-existing subscriber fan-out. Operations and verification commands are in
-[OPERATIONS.md](OPERATIONS.md) § CBRN watch.
-
-What this layer deliberately does **not** claim: prediction, global coverage,
-or that a quiet instrument means safety. Its open work:
-
-- **Warm-up is the current state.** The radiological detector arms per station
-  after 48 hourly samples (two days) and the aircraft detector after ten
-  same-hour samples over 21 days. Until then both report `warming`.
-- **Radiation coverage is Europe and the United States** because no open
-  global network exists. CTBTO's IMS network is treaty-restricted; ProMED moved
-  behind a subscription.
-- **The BfS EURDEP mirror needs lag monitoring.** It is a national regulator's
-  republication of a European feed whose authoritative JRC service was stale.
-- **Vocabulary coverage is one post stream and one news index**, and its
-  latency advantage over official reporting remains a hypothesis to measure,
-  not an established fact.
-- **Alarm calibration is unproven until it has seen a real event.** The
-  thresholds are defended by measurement and physics, not by a record of
-  correct alerts. The first year of firing history is the evidence that will
-  matter, and it should be published.
-- **The fusion pass has had no live multi-family agreement yet.**
 
 ## 0. The contract (the whole system in one sentence)
 
