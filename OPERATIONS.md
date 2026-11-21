@@ -141,6 +141,16 @@ aircraft table, once no whole read is 75 minutes old, that the cohorts have no
 sample and why. Reading the archive again is a decision of Xyra's: ADS-B
 Exchange sells a key (§ Live-source prerequisite), and no session is taken
 another way.
+The nightly selftest felt the same gate 23 nights later: its takeoff replay
+scores the trailing 30 days of ingest slots, the closed archive drained that
+window by 48 slots a night (504, 456, 408, 360 on the nights to 20 Nov), and at
+01:40 UTC on 21 Nov 2026 the 312 left failed the warm bound (≥ 336), the
+business-jet run exited 2 before the military run began, the unit failed, and
+the watchdog paged at high at 01:46 UTC as a problem of the box's. The warm
+bound is a claim about a live instrument, so the backtest now assesses it only
+while the source delivers (newest ingest slot within the 75-minute outage
+bound); while the source is silent the bound reads `ok: null` with its
+`skipped` reason and `status.js` names the gap.
 The self-healing repair of 18:50 UTC on 28 Oct 2026 ran against that gate and
 was the box's own: both backfills cleared the range they were asked for before
 reading it, so the trailing repair of 28 Oct deleted the day's 28 live slots
@@ -530,7 +540,7 @@ loudly.
 | Takeoff score calibration | 1-in-100 scores in ≤ 2 % of slots | the thresholds are tail probabilities; if the tail stops being honest the thresholds stop meaning what the page says | `backtest --assert` |
 | CUSUM crossings | ≤ 1.5/30 d (critical ≤ 0.5/30 d) | sustained-shift pages must stay rare on real history | `backtest --assert` |
 | Concurrent level-5 days | ≤ 1/30 d (level ≥ 4 ≤ 2/30 d) | threshold self-calibrates to 2nd-highest daily peak ⇒ ~1 alarm/yr as history deepens | `backtest --assert` |
-| Detector warm | ≥ 336 scoreable slots | below a week of live baseline the takeoff channel cannot score | `backtest --assert` |
+| Detector warm | ≥ 336 scoreable slots | below a week of live baseline the takeoff channel cannot score; assessed only while the source delivers (newest ingest slot ≤ 75 min old) — a silent source drains the 30-day replay by 48 slots a night and that shortfall is the source's, named by `status.js` (21 Nov 2026) | `backtest --assert` |
 
 **Latency is a chain, not a timer setting.** Source observation → archive
 publication (30-minute archive windows plus upstream release lag) → next poll
@@ -839,6 +849,7 @@ the upstream reference site.
 | repair summary `archiveUnread: true`, actions `skipped: "archive unread"`, an `ingestion_runs` row `skipped` with `archiveUnavailable` | the archive refused a read (429, 5xx, the verified-session 403): the backfill exits 75 before deleting or writing anything and the repair skips the rest | nothing of the box's; the next run asks again. A 429 that outlives the gate was the box's own burst (144 reads from 18:50 UTC on 28 Oct 2026); the repair now asks once a run |
 | a day's metric rows gone, a zero `daily_metrics` row, after a repair that reported the day repaired | a backfill before 28 Oct 2026 cleared the range before reading and read nothing | main and military: `INSERT INTO concurrent_metrics (sampled_at, concurrent_count) SELECT observed_at, COUNT(*) FROM observations WHERE source = 'adsbx_heatmap' AND is_airborne = 1 AND observed_at >= '<day>' AND observed_at < '<day+1>' GROUP BY observed_at` and delete the day's `daily_metrics` row; untracked: `track_non_icao_hex.py --db data/ews-untracked.sqlite --start-date <day> --end-date <day+1> --metrics-only --write-concurrent-metrics --skip-download --cache-dir data/cache/adsbx_live` under the deploy flock (done 19:23 UTC on 28 Oct 2026) |
 | ntfy topic spammed | ntfy.sh topics are public-write | self-host ntfy with write auth; rotate topic |
+| `warning-watch-selftest.service: failed — check journalctl` | the nightly backtest violated a bound: the journal's `bounds` list names it (`ok: false`); a bound at `ok: null` was not assessed and its `skipped` says why. The business-jet run exits before the military run begins | read the bound's basis in § Instrument bounds: a code or data change pushed the detector out of spec, or (until 21 Nov 2026) a silent source drained the warm bound. The unit clears at the next 01:40 UTC run or on `systemctl start warning-watch-selftest.service` |
 
 ## Known operational notes
 

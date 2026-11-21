@@ -276,6 +276,8 @@ function takeoffReplay(db, args) {
     replayedDays: args.takeoffDays,
     slots: slots.length,
     readySlots,
+    newestSlotAt: rows.length ? rows[rows.length - 1].sampledAt : null,
+    newestSlotAgeMinutes: rows.length ? Math.round((now - rows[rows.length - 1].sampledAtMs) / 60000) : null,
     dataQualityFrequency,
     surpriseQuantiles: { p50: quantileOf(0.5), p90: quantileOf(0.9), p99: quantileOf(0.99), max: quantileOf(1) },
     calibration: { nominal01: +observedAt(1).toFixed(4), nominal001: +observedAt(2).toFixed(4), nominal0001: +observedAt(3).toFixed(4) },
@@ -354,11 +356,20 @@ function injectExodus(rows, args) {
 // the replayed span so the same limits hold as history deepens. Any
 // violation exits non-zero, which the nightly selftest timer surfaces
 // through status.js -> ops watchdog: if data drift or a code change pushes
-// the detector out of spec, the box pages a human within a day.
+// the detector out of spec, the box pages a human within a day. A bound
+// with ok null was not assessed and says why in `skipped`.
+//
+// OPERATIONS.md "Data age": the source-outage bound, past which status.js
+// names the gap (the archive unread, or the row-age bound) and no slot is
+// the box's to have.
+const SOURCE_OUTAGE_MINUTES = 75;
+
 function assertBounds(report, args) {
   const cusumDays = report.cusum.scoredSlots / 48;
   const concurrentDays = report.concurrent.scoredDays || 1;
   const cusumCriticals = report.cusum.crossings.filter((c) => c.severity === 'critical').length;
+  const newestSlotAge = report.takeoffRate.newestSlotAgeMinutes;
+  const sourceSilent = newestSlotAge === null || newestSlotAge > SOURCE_OUTAGE_MINUTES;
   const bounds = [
     {
       name: 'injected 3x exodus reaches high within 60 min',
@@ -383,8 +394,21 @@ function assertBounds(report, args) {
       ok: report.takeoffRate.calibration.nominal001 <= 0.02,
     },
     {
+      // Warmth is a claim about the live instrument: while the source delivers,
+      // under a week of scoreable slots in the replay means the takeoff channel
+      // cannot score. Once the source has been silent past the outage bound the
+      // 30-day window drains by 48 slots a night and the shortfall is the
+      // source's, which status.js already names; the bound is then not assessed.
+      // The archive closed on 28 Oct 2026 and the 23rd night, 21 Nov, failed it.
       name: `takeoff replay: ${report.takeoffRate.readySlots} scoreable slots >= 336 (instrument warm)`,
-      ok: report.takeoffRate.readySlots >= 336,
+      ...(sourceSilent
+        ? {
+          ok: null,
+          skipped: `not assessed: source silent, ${report.takeoffRate.newestSlotAt
+            ? `newest slot ${report.takeoffRate.newestSlotAt} is ${newestSlotAge}m old (bound ${SOURCE_OUTAGE_MINUTES}m)`
+            : 'no slot read yet'}; status.js names the gap`,
+        }
+        : { ok: report.takeoffRate.readySlots >= 336 }),
     },
     {
       name: `cusum: ${report.cusum.crossingCount} crossings <= 1.5/30d`,
@@ -403,7 +427,7 @@ function assertBounds(report, args) {
       ok: report.concurrent.level4PlusDays <= Math.ceil(concurrentDays / 15),
     },
   ];
-  return { passed: bounds.every((bound) => bound.ok), bounds };
+  return { passed: bounds.every((bound) => bound.ok !== false), bounds };
 }
 
 function main() {
