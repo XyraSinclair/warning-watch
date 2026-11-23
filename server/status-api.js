@@ -37,11 +37,16 @@ function readAlerts(db) {
   if (!db) throw new Error("alert record unavailable");
   // A retracted alert was raised under a threshold the instrument has since
   // recalibrated. It stays in the record with its delivery state intact, and
-  // leaves the public feed.
+  // leaves the public feed. The page speaks of the aircraft cohorts alone: the
+  // CBRN layer left the site on 3 Nov 2026 (8f98934) and its 4,911 events stay
+  // in the record as they were delivered and leave this payload here, not by
+  // retraction, which would have the ntfy rail post a correction for each one
+  // it carried.
   return db.prepare(
     `SELECT kind, severity, cohort, occurred_at AS occurredAt, title, message
        FROM alert_events
       WHERE ${PUBLIC_EVENT_SQL}
+        AND cohort IN ('global_business_jet', 'global_military_aircraft', 'non_icao_untracked')
       ORDER BY occurred_at DESC, id DESC LIMIT ?`,
   ).all(MAX_ALERTS);
 }
