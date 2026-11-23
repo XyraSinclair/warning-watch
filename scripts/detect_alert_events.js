@@ -473,6 +473,14 @@ function hasIngestSlotsTable(db) {
   );
 }
 
+// The newest slot the source delivered: the end of any window that claims the
+// source's trailing days rather than the clock's.
+function newestIngestSlotAt(db) {
+  return hasIngestSlotsTable(db)
+    ? db.prepare('SELECT MAX(sampled_at) AS v FROM ingest_slots').get()?.v ?? null
+    : null;
+}
+
 // Final-slice provenance is the takeoff clock. Concurrent metrics may instead
 // carry an independently timed peak; joining through them loses valid zeroes.
 // Like transition windows, the requested observation range is (start, end].
@@ -1129,6 +1137,7 @@ module.exports = {
   getTakeoffRateStats,
   buildTakeoffBaseline,
   loadTakeoffSlots,
+  newestIngestSlotAt,
   buildDataQuality,
   getTakeoffEvents,
   getTakeoffWindow,

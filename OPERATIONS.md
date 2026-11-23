@@ -150,7 +150,16 @@ the watchdog paged at high at 01:46 UTC as a problem of the box's. The warm
 bound is a claim about a live instrument, so the backtest now assesses it only
 while the source delivers (newest ingest slot within the 75-minute outage
 bound); while the source is silent the bound reads `ok: null` with its
-`skipped` reason and `status.js` names the gap.
+`skipped` reason and `status.js` names the gap. Two nights later the same drain
+crossed the calibration bound: the count of 1-in-100 scores held at 6, 6, 6, 5,
+5 over 408, 360, 312, 264 and 216 slots, so the ratio climbed 1.47 % → 2.31 %
+with the detector unchanged, and at 01:40 UTC on 23 Nov 2026 the unit failed
+again (paged at high at 01:46 and 07:46 UTC). Every ratio over a clock-anchored
+window drifts under a silent source, so the replay's days now end at the newest
+ingest slot the source delivered, not at the clock: under silence the replay is
+the detector's last 30 delivered days on any night, and while the source
+delivers the anchor is within a slot of now. Warmth alone stays a claim about
+the present and is not assessed under silence.
 The self-healing repair of 18:50 UTC on 28 Oct 2026 ran against that gate and
 was the box's own: both backfills cleared the range they were asked for before
 reading it, so the trailing repair of 28 Oct deleted the day's 28 live slots
@@ -537,10 +546,10 @@ loudly.
 | 3× exodus → CRITICAL | ≤ 120 min | one 3× slot reads ~9–10σ while the self-calibrated alarm line sits at ~11σ (2nd-hottest real day — Dec 27 holiday wave hit 11.1σ with no apocalypse); sustain is what separates an exodus from a holiday wave, and CUSUM accumulates it past critical inside two hours (recalibrated 2026-08-30 on the full 365-day history) | `backtest --assert` |
 | Takeoff false criticals | 0 in replay | critical is a paging severity; history contains no exodus | `backtest --assert` |
 | Takeoff public alerts | ≤ 12/yr (+2 slack per replay) | the stated alert budget; counted at elevated and above, the tiers a subscriber receives | `backtest --assert` |
-| Takeoff score calibration | 1-in-100 scores in ≤ 2 % of slots | the thresholds are tail probabilities; if the tail stops being honest the thresholds stop meaning what the page says | `backtest --assert` |
+| Takeoff score calibration | 1-in-100 scores in ≤ 2 % of slots | the thresholds are tail probabilities; if the tail stops being honest the thresholds stop meaning what the page says. Every takeoff-replay bound reads the 30 days ending at the newest delivered ingest slot, not at the clock, so a silent source cannot drain the denominator (23 Nov 2026) | `backtest --assert` |
 | CUSUM crossings | ≤ 1.5/30 d (critical ≤ 0.5/30 d) | sustained-shift pages must stay rare on real history | `backtest --assert` |
 | Concurrent level-5 days | ≤ 1/30 d (level ≥ 4 ≤ 2/30 d) | threshold self-calibrates to 2nd-highest daily peak ⇒ ~1 alarm/yr as history deepens | `backtest --assert` |
-| Detector warm | ≥ 336 scoreable slots | below a week of live baseline the takeoff channel cannot score; assessed only while the source delivers (newest ingest slot ≤ 75 min old) — a silent source drains the 30-day replay by 48 slots a night and that shortfall is the source's, named by `status.js` (21 Nov 2026) | `backtest --assert` |
+| Detector warm | ≥ 336 scoreable slots | below a week of live baseline the takeoff channel cannot score; assessed only while the source delivers (newest ingest slot ≤ 75 min old) — under a silent source the replay is the instrument's past, not its present, and `status.js` names the gap (21 Nov 2026) | `backtest --assert` |
 
 **Latency is a chain, not a timer setting.** Source observation → archive
 publication (30-minute archive windows plus upstream release lag) → next poll
@@ -849,7 +858,7 @@ the upstream reference site.
 | repair summary `archiveUnread: true`, actions `skipped: "archive unread"`, an `ingestion_runs` row `skipped` with `archiveUnavailable` | the archive refused a read (429, 5xx, the verified-session 403): the backfill exits 75 before deleting or writing anything and the repair skips the rest | nothing of the box's; the next run asks again. A 429 that outlives the gate was the box's own burst (144 reads from 18:50 UTC on 28 Oct 2026); the repair now asks once a run |
 | a day's metric rows gone, a zero `daily_metrics` row, after a repair that reported the day repaired | a backfill before 28 Oct 2026 cleared the range before reading and read nothing | main and military: `INSERT INTO concurrent_metrics (sampled_at, concurrent_count) SELECT observed_at, COUNT(*) FROM observations WHERE source = 'adsbx_heatmap' AND is_airborne = 1 AND observed_at >= '<day>' AND observed_at < '<day+1>' GROUP BY observed_at` and delete the day's `daily_metrics` row; untracked: `track_non_icao_hex.py --db data/ews-untracked.sqlite --start-date <day> --end-date <day+1> --metrics-only --write-concurrent-metrics --skip-download --cache-dir data/cache/adsbx_live` under the deploy flock (done 19:23 UTC on 28 Oct 2026) |
 | ntfy topic spammed | ntfy.sh topics are public-write | self-host ntfy with write auth; rotate topic |
-| `warning-watch-selftest.service: failed — check journalctl` | the nightly backtest violated a bound: the journal's `bounds` list names it (`ok: false`); a bound at `ok: null` was not assessed and its `skipped` says why. The business-jet run exits before the military run begins | read the bound's basis in § Instrument bounds: a code or data change pushed the detector out of spec, or (until 21 Nov 2026) a silent source drained the warm bound. The unit clears at the next 01:40 UTC run or on `systemctl start warning-watch-selftest.service` |
+| `warning-watch-selftest.service: failed — check journalctl` | the nightly backtest violated a bound: the journal's `bounds` list names it (`ok: false`); a bound at `ok: null` was not assessed and its `skipped` says why. The business-jet run exits before the military run begins | read the bound's basis in § Instrument bounds: a code or data change pushed the detector out of spec, or (until 23 Nov 2026) a silent source drained the clock-anchored replay window (the warm bound on 21 Nov, the calibration ratio on 23 Nov). The unit clears at the next 01:40 UTC run or on `systemctl start warning-watch-selftest.service` |
 
 ## Known operational notes
 

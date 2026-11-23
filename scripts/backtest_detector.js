@@ -10,7 +10,8 @@
 //     strict walk-forward)
 //   - CUSUM: the shared cusumStep law over the scored sigma-shift sequence
 //   - takeoff-rate model: strict walk-forward — getTakeoffRateStats at each
-//     slot only reads data before that slot
+//     slot only reads data before that slot; the replayed days end at the
+//     newest ingest slot the source delivered, not at the clock
 //   - --inject-exodus: multiplies the trailing hour's concurrent counts and
 //     verifies the model reaches emergency level 5 within 60 minutes
 //     (the "3x exodus fires critical" exit criterion)
@@ -32,6 +33,7 @@ const Database = require('better-sqlite3');
 const {
   buildTakeoffBaseline,
   loadTakeoffSlots,
+  newestIngestSlotAt,
   buildDataQuality,
   getTakeoffWindow,
   takeoffSurprise,
@@ -190,13 +192,23 @@ function takeoffReplay(db, args) {
   const lookbackDays = Math.max(1, args.takeoffRateLookbackDays);
   const replayDays = Math.max(1, args.takeoffDays);
   const now = Date.now();
+  // The replayed days end at the newest slot the source delivered, not at the
+  // clock. Anchored at the clock, a silent source drains the window by 48
+  // slots a night and every ratio over it drifts while the detector is
+  // unchanged (the archive closed on 28 Oct 2026; the warm bound failed on
+  // 21 Nov at 312 slots, the calibration bound on 23 Nov at 5 of 216).
+  // Anchored at the source, the replay is the detector's last 30 delivered
+  // days on any night; while the source delivers the anchor is within a slot
+  // of now.
+  const newestSlotAt = newestIngestSlotAt(db);
+  const endMs = newestSlotAt ? Date.parse(newestSlotAt) : now;
   const rows = loadTakeoffSlots(
     db, args.cohort, args.takeoffLiveSource,
-    new Date(now - (Math.max(lookbackDays, 14) + replayDays) * 24 * 60 * 60 * 1000 -
+    new Date(endMs - (Math.max(lookbackDays, 14) + replayDays) * 24 * 60 * 60 * 1000 -
       Math.max(1, args.takeoffWindowMinutes) * 60 * 1000).toISOString(),
-    new Date(now).toISOString(),
+    new Date(endMs).toISOString(),
   );
-  const replayStartMs = now - replayDays * 24 * 60 * 60 * 1000;
+  const replayStartMs = endMs - replayDays * 24 * 60 * 60 * 1000;
   const lookbackMs = lookbackDays * 24 * 60 * 60 * 1000;
   const options = {
     takeoffWindowMinutes: args.takeoffWindowMinutes,
@@ -276,8 +288,8 @@ function takeoffReplay(db, args) {
     replayedDays: args.takeoffDays,
     slots: slots.length,
     readySlots,
-    newestSlotAt: rows.length ? rows[rows.length - 1].sampledAt : null,
-    newestSlotAgeMinutes: rows.length ? Math.round((now - rows[rows.length - 1].sampledAtMs) / 60000) : null,
+    newestSlotAt,
+    newestSlotAgeMinutes: newestSlotAt ? Math.round((now - endMs) / 60000) : null,
     dataQualityFrequency,
     surpriseQuantiles: { p50: quantileOf(0.5), p90: quantileOf(0.9), p99: quantileOf(0.99), max: quantileOf(1) },
     calibration: { nominal01: +observedAt(1).toFixed(4), nominal001: +observedAt(2).toFixed(4), nominal0001: +observedAt(3).toFixed(4) },
@@ -397,9 +409,10 @@ function assertBounds(report, args) {
       // Warmth is a claim about the live instrument: while the source delivers,
       // under a week of scoreable slots in the replay means the takeoff channel
       // cannot score. Once the source has been silent past the outage bound the
-      // 30-day window drains by 48 slots a night and the shortfall is the
-      // source's, which status.js already names; the bound is then not assessed.
-      // The archive closed on 28 Oct 2026 and the 23rd night, 21 Nov, failed it.
+      // replay is the instrument's past, not its present, and its slot count
+      // says nothing about scoring now; the bound is then not assessed and
+      // status.js names the gap. The archive closed on 28 Oct 2026 and the
+      // 23rd night, 21 Nov, failed it while the window still drained.
       name: `takeoff replay: ${report.takeoffRate.readySlots} scoreable slots >= 336 (instrument warm)`,
       ...(sourceSilent
         ? {
